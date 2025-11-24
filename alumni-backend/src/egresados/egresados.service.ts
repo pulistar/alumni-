@@ -1,0 +1,140 @@
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { SupabaseService } from '../database/supabase.service';
+import { CreateEgresadoDto } from './dto/create-egresado.dto';
+import { UpdateEgresadoDto } from './dto/update-egresado.dto';
+
+@Injectable()
+export class EgresadosService {
+  private readonly logger = new Logger(EgresadosService.name);
+
+  constructor(private readonly supabaseService: SupabaseService) {}
+
+  /**
+   * Create or link egresado profile to Supabase User
+   */
+  async create(uid: string, email: string, dto: CreateEgresadoDto) {
+    // 1. Check if profile already exists linked to this UID
+    const { data: existingProfile } = await this.supabaseService
+      .getClient()
+      .from('egresados')
+      .select('id')
+      .eq('uid', uid)
+      .is('deleted_at', null)
+      .single();
+
+    if (existingProfile) {
+      throw new BadRequestException('El perfil ya existe para este usuario');
+    }
+
+    // 2. Check if email is already registered (prevent duplicates)
+    const { data: existingEmail } = await this.supabaseService
+      .getClient()
+      .from('egresados')
+      .select('id')
+      .eq('correo', email)
+      .is('deleted_at', null)
+      .single();
+
+    if (existingEmail) {
+      throw new BadRequestException('El correo ya está registrado en otro perfil');
+    }
+
+    // 3. Create profile
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('egresados')
+      .insert({
+        uid,
+        correo: email,
+        ...dto,
+        // habilitado defaults to false in DB
+        // Admin will enable via Excel upload or manual toggle
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error creating profile for ${email}: ${error.message}`);
+      if (error.code === '23505') {
+        throw new BadRequestException('El correo ya está registrado en otro perfil');
+      }
+      throw new InternalServerErrorException('Error al crear el perfil');
+    }
+
+    return data;
+  }
+
+  /**
+   * Find egresado profile by UID
+   */
+  async findOne(uid: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('egresados')
+      .select('*')
+      .eq('uid', uid)
+      .is('deleted_at', null)
+      .single();
+
+    if (error || !data) {
+      if (error?.code === 'PGRST116') {
+        throw new NotFoundException('Perfil no encontrado. Por favor completa tu registro.');
+      }
+      throw new InternalServerErrorException('Error al obtener el perfil');
+    }
+
+    return data;
+  }
+
+  /**
+   * Update egresado profile
+   */
+  async update(uid: string, dto: UpdateEgresadoDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('egresados')
+      .update(dto)
+      .eq('uid', uid)
+      .is('deleted_at', null)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error updating profile for ${uid}: ${error.message}`);
+      throw new InternalServerErrorException('Error al actualizar el perfil');
+    }
+
+    return data;
+  }
+
+  /**
+   * Soft delete egresado profile
+   */
+  async delete(uid: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('egresados')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('uid', uid)
+      .is('deleted_at', null)
+      .select()
+      .single();
+
+    if (error || !data) {
+      if (error?.code === 'PGRST116') {
+        throw new NotFoundException('Perfil no encontrado o ya eliminado');
+      }
+      this.logger.error(`Error deleting profile for ${uid}: ${error?.message}`);
+      throw new InternalServerErrorException('Error al eliminar el perfil');
+    }
+
+    this.logger.log(`Profile soft deleted for uid: ${uid}`);
+    return { message: 'Perfil eliminado exitosamente' };
+  }
+}

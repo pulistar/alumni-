@@ -1,0 +1,97 @@
+import { Injectable, UnauthorizedException, Logger, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
+import { SupabaseService } from '../database/supabase.service';
+import { LoginAdminDto } from './dto/login-admin.dto';
+import { MagicLinkDto } from './dto/magic-link.dto';
+import { AuthResponseDto } from './dto/auth-response.dto';
+import { ITokenPayload } from './interfaces/token-payload.interface';
+
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  /**
+   * Authenticate Admin using Email and Password
+   * @param dto LoginAdminDto
+   * @returns AuthResponseDto with JWT token
+   */
+  async loginAdmin(dto: LoginAdminDto): Promise<AuthResponseDto> {
+    const { email, password } = dto;
+
+    // 1. Find admin in database
+    const { data: admin, error } = await this.supabaseService
+      .getClient()
+      .from('administradores')
+      .select('*')
+      .eq('correo', email)
+      .single();
+
+    if (error || !admin) {
+      this.logger.warn(`Failed login attempt for admin: ${email}`);
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    if (!admin.activo) {
+      throw new UnauthorizedException('Cuenta de administrador inactiva');
+    }
+
+    // 2. Validate password
+    const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
+
+    if (!isPasswordValid) {
+      this.logger.warn(`Invalid password for admin: ${email}`);
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    // 3. Generate JWT
+    const payload: ITokenPayload = {
+      sub: admin.id,
+      email: admin.correo,
+      role: admin.rol,
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+
+    this.logger.log(`Admin logged in successfully: ${email}`);
+
+    return {
+      accessToken,
+      user: {
+        id: admin.id,
+        email: admin.correo,
+        role: admin.rol,
+        nombre: admin.nombre,
+        apellido: admin.apellido,
+      },
+    };
+  }
+
+  /**
+   * Send Magic Link to Alumni
+   * @param dto MagicLinkDto
+   */
+  async sendMagicLink(dto: MagicLinkDto): Promise<void> {
+    const { email } = dto;
+
+    // Send Magic Link via Supabase
+    const { error } = await this.supabaseService.getClient().auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/auth/callback`,
+      },
+    });
+
+    if (error) {
+      this.logger.error(`Error sending magic link to ${email}: ${error.message}`);
+      throw new BadRequestException('Error al enviar el enlace de acceso');
+    }
+
+    this.logger.log(`Magic link sent to: ${email}`);
+  }
+}
