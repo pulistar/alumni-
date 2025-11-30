@@ -859,6 +859,7 @@ export class AdminService {
 
         const publicUrl = urlData?.publicUrl || null;
         this.logger.log(`Generated URL for ${doc.nombre_archivo}: ${publicUrl}`);
+        this.logger.log(`created_at value: ${doc.created_at}, type: ${typeof doc.created_at}`);
 
         acc[carreraName].push({
           id: doc.id,

@@ -5,9 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import '../../../core/config/api_config.dart';
 import '../../../data/services/api_service.dart';
 import '../../../data/services/auth_service.dart';
+import 'pdf_viewer_screen.dart';
 
 class PdfsUnificadosScreen extends StatefulWidget {
   const PdfsUnificadosScreen({super.key});
@@ -21,10 +24,21 @@ class _PdfsUnificadosScreenState extends State<PdfsUnificadosScreen> {
   Map<String, dynamic>? _data;
   bool _isLoading = true;
   String? _errorMessage;
+  
+  // Selection mode state
+  bool _selectionMode = false;
+  Set<String> _selectedDocuments = {};
+  bool _isDownloadingMultiple = false;
 
   @override
   void initState() {
     super.initState();
+    _initializeAndLoadPDFs();
+  }
+
+  Future<void> _initializeAndLoadPDFs() async {
+    // Initialize Spanish locale for date formatting
+    await initializeDateFormatting('es', null);
     _loadPDFs();
   }
 
@@ -44,6 +58,20 @@ class _PdfsUnificadosScreenState extends State<PdfsUnificadosScreen> {
 
       final data = await _apiService.getPDFsUnificados(token);
 
+      // Debug: Print data structure
+      print('🔵 PDFs Unificados data: $data');
+      if (data['por_carrera'] != null) {
+        final porCarrera = data['por_carrera'] as List<dynamic>;
+        print('🔵 Carreras count: ${porCarrera.length}');
+        if (porCarrera.isNotEmpty) {
+          print('🔵 First carrera: ${porCarrera[0]}');
+          final docs = porCarrera[0]['documentos'] as List<dynamic>?;
+          if (docs != null && docs.isNotEmpty) {
+            print('🔵 First document: ${docs[0]}');
+          }
+        }
+      }
+
       if (mounted) {
         setState(() {
           _data = data;
@@ -60,6 +88,69 @@ class _PdfsUnificadosScreenState extends State<PdfsUnificadosScreen> {
     }
   }
 
+  /// Group documents by month/year
+  Map<String, List<dynamic>> _groupByMonth(List<dynamic> documents) {
+    final Map<String, List<dynamic>> grouped = {};
+    
+    for (var doc in documents) {
+      try {
+        final fechaStr = doc['fecha_generacion'] as String?;
+        String monthKey;
+        
+        if (fechaStr == null || fechaStr.isEmpty) {
+          // Documents without date go to "Sin fecha"
+          monthKey = 'Sin fecha';
+        } else {
+          try {
+            // Parse the date - handle PostgreSQL timestamp format
+            DateTime fecha;
+            try {
+              fecha = DateTime.parse(fechaStr);
+            } catch (e) {
+              // If parsing fails, try removing microseconds
+              // Format: 2025-11-25T13:34:47.744251+00:00
+              final cleanedDate = fechaStr.replaceAll(RegExp(r'\.\d+'), '');
+              fecha = DateTime.parse(cleanedDate);
+            }
+            
+            monthKey = DateFormat('MMMM yyyy', 'es').format(fecha);
+          } catch (e) {
+            // If date parsing fails, use "Sin fecha"
+            print('❌ Error parsing date: $fechaStr - $e');
+            monthKey = 'Sin fecha';
+          }
+        }
+        
+        if (!grouped.containsKey(monthKey)) {
+          grouped[monthKey] = [];
+        }
+        grouped[monthKey]!.add(doc);
+      } catch (e) {
+        // If anything fails, add to "Sin fecha"
+        print('❌ Error grouping document: $e');
+        if (!grouped.containsKey('Sin fecha')) {
+          grouped['Sin fecha'] = [];
+        }
+        grouped['Sin fecha']!.add(doc);
+      }
+    }
+    
+    return grouped;
+  }
+
+  /// Preview PDF in viewer screen
+  void _previewPDF(String documentoId, String nombreArchivo) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PdfViewerScreen(
+          documentoId: documentoId,
+          nombreArchivo: nombreArchivo,
+        ),
+      ),
+    );
+  }
+
+  /// Download single PDF
   Future<void> _downloadPDF(String documentoId, String nombre) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -146,51 +237,212 @@ class _PdfsUnificadosScreenState extends State<PdfsUnificadosScreen> {
     }
   }
 
+  /// Toggle selection mode
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) {
+        _selectedDocuments.clear();
+      }
+    });
+  }
+
+  /// Select all documents
+  void _selectAll() {
+    setState(() {
+      _selectedDocuments.clear();
+      if (_data != null) {
+        final porCarrera = _data!['por_carrera'] as List<dynamic>?;
+        if (porCarrera != null) {
+          for (var carreraData in porCarrera) {
+            final documentos = carreraData['documentos'] as List<dynamic>?;
+            if (documentos != null) {
+              for (var doc in documentos) {
+                final id = doc['id'] as String?;
+                if (id != null) {
+                  _selectedDocuments.add(id);
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  /// Download selected documents
+  Future<void> _downloadSelected() async {
+    if (_selectedDocuments.isEmpty) return;
+
+    setState(() {
+      _isDownloadingMultiple = true;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+
+      if (token == null) {
+        throw Exception('No hay token de autenticación');
+      }
+
+      int successCount = 0;
+      int errorCount = 0;
+
+      // Get all documents
+      final allDocs = <Map<String, dynamic>>[];
+      if (_data != null) {
+        final porCarrera = _data!['por_carrera'] as List<dynamic>?;
+        if (porCarrera != null) {
+          for (var carreraData in porCarrera) {
+            final documentos = carreraData['documentos'] as List<dynamic>?;
+            if (documentos != null) {
+              allDocs.addAll(documentos.cast<Map<String, dynamic>>());
+            }
+          }
+        }
+      }
+
+      // Download each selected document
+      for (var docId in _selectedDocuments) {
+        try {
+          final doc = allDocs.firstWhere((d) => d['id'] == docId);
+          final nombre = doc['nombre_archivo'] as String? ?? 'documento.pdf';
+          
+          await _downloadPDF(docId, nombre);
+          successCount++;
+        } catch (e) {
+          errorCount++;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Descargados: $successCount | ❌ Errores: $errorCount',
+            ),
+            backgroundColor: errorCount == 0 ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        setState(() {
+          _selectionMode = false;
+          _selectedDocuments.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloadingMultiple = false;
+        });
+      }
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      return DateFormat('dd/MM/yyyy', 'es').format(date);
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         title: const Text('PDFs Unificados'),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
         actions: [
+          if (!_selectionMode)
+            IconButton(
+              icon: const Icon(Icons.checklist),
+              onPressed: _toggleSelectionMode,
+              tooltip: 'Modo selección',
+            ),
+          if (_selectionMode) ...[
+            IconButton(
+              icon: const Icon(Icons.select_all),
+              onPressed: _selectAll,
+              tooltip: 'Seleccionar todos',
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: _toggleSelectionMode,
+              tooltip: 'Cancelar',
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadPDFs,
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? _buildErrorView()
-              : _buildContent(),
+      body: _buildBody(),
+      floatingActionButton: _selectionMode && _selectedDocuments.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _isDownloadingMultiple ? null : _downloadSelected,
+              icon: _isDownloadingMultiple
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.download),
+              label: Text('Descargar (${_selectedDocuments.length})'),
+            )
+          : null,
     );
   }
 
-  Widget _buildErrorView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-          const SizedBox(height: 16),
-          Text('Error al cargar PDFs', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(_errorMessage!, textAlign: TextAlign.center),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _loadPDFs,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Reintentar'),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-  Widget _buildContent() {
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'Error al cargar PDFs',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage!,
+              style: TextStyle(color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _loadPDFs,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (_data == null) {
       return const Center(child: Text('No hay datos disponibles'));
     }
@@ -203,143 +455,135 @@ class _PdfsUnificadosScreenState extends State<PdfsUnificadosScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.picture_as_pdf_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.picture_as_pdf, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            Text('No hay PDFs unificados', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text('Los egresados aún no han generado sus PDFs unificados'),
+            Text(
+              'No hay PDFs disponibles',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
           ],
         ),
       );
     }
 
-    return SingleChildScrollView(
+    return ListView.builder(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Summary card
-          Card(
-            color: Colors.blue.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(Icons.picture_as_pdf, size: 40, color: Colors.blue.shade700),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
+      itemCount: porCarrera.length,
+      itemBuilder: (context, index) {
+        final carreraData = porCarrera[index] as Map<String, dynamic>;
+        final carrera = carreraData['carrera'] as String? ?? 'Sin carrera';
+        final documentos = carreraData['documentos'] as List<dynamic>? ?? [];
+
+        // Group documents by month
+        final groupedByMonth = _groupByMonth(documentos);
+        final sortedMonths = groupedByMonth.keys.toList()
+          ..sort((a, b) {
+            try {
+              final dateA = DateFormat('MMMM yyyy', 'es').parse(a);
+              final dateB = DateFormat('MMMM yyyy', 'es').parse(b);
+              return dateB.compareTo(dateA); // Most recent first
+            } catch (e) {
+              return 0;
+            }
+          });
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: ExpansionTile(
+            title: Text(
+              carrera,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text('${documentos.length} documentos'),
+            children: sortedMonths.map((month) {
+              final monthDocs = groupedByMonth[month]!;
+              return ExpansionTile(
+                title: Text(
+                  month,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+                subtitle: Text('${monthDocs.length} documentos'),
+                children: monthDocs.map((doc) {
+                  final documentoId = doc['id'] as String?;
+                  final nombre = doc['egresado_nombre'] as String? ?? 'Sin nombre';
+                  final correo = doc['egresado_correo'] as String? ?? '';
+                  final nombreArchivo = doc['nombre_archivo'] as String? ?? 'documento.pdf';
+                  final fecha = doc['fecha_generacion'] as String?;
+                  final isSelected = documentoId != null && _selectedDocuments.contains(documentoId);
+
+                  return ListTile(
+                    leading: _selectionMode
+                        ? Checkbox(
+                            value: isSelected,
+                            onChanged: documentoId == null
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      if (value == true) {
+                                        _selectedDocuments.add(documentoId);
+                                      } else {
+                                        _selectedDocuments.remove(documentoId);
+                                      }
+                                    });
+                                  },
+                          )
+                        : const Icon(Icons.picture_as_pdf, color: Colors.red),
+                    title: Text(nombre),
+                    subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Total de PDFs',
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
-                        ),
-                        Text(
-                          total.toString(),
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade700,
+                        if (correo.isNotEmpty)
+                          Text(correo, style: const TextStyle(fontSize: 12)),
+                        if (fecha != null)
+                          Text(
+                            'Generado: ${_formatDate(fecha)}',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                           ),
-                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // By career
-          Text(
-            'Por Carrera',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: porCarrera.length,
-            itemBuilder: (context, index) {
-              final carreraData = porCarrera[index] as Map<String, dynamic>;
-              final carrera = carreraData['carrera'] as String;
-              final totalCarrera = carreraData['total'] as int;
-              final documentos = carreraData['documentos'] as List<dynamic>;
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ExpansionTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue.shade100,
-                    child: Text(
-                      totalCarrera.toString(),
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    carrera,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text('$totalCarrera PDF${totalCarrera != 1 ? 's' : ''} disponible${totalCarrera != 1 ? 's' : ''}'),
-                  children: [
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: documentos.length,
-                      itemBuilder: (context, docIndex) {
-                        final doc = documentos[docIndex] as Map<String, dynamic>;
-                        final documentoId = doc['id'] as String?;
-                        final nombre = doc['egresado_nombre'] as String? ?? 'Sin nombre';
-                        final correo = doc['egresado_correo'] as String? ?? '';
-                        final nombreArchivo = doc['nombre_archivo'] as String? ?? 'documento.pdf';
-                        final fecha = doc['fecha_generacion'] as String?;
-
-                        return ListTile(
-                          leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                          title: Text(nombre),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    trailing: documentoId != null && !_selectionMode
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (correo.isNotEmpty) Text(correo, style: const TextStyle(fontSize: 12)),
-                              if (fecha != null)
-                                Text(
-                                  'Generado: ${_formatDate(fecha)}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.visibility),
+                                color: Colors.blue,
+                                onPressed: () => _previewPDF(documentoId, nombreArchivo),
+                                tooltip: 'Vista previa',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.download),
+                                color: Colors.green,
+                                onPressed: () => _downloadPDF(documentoId, nombreArchivo),
+                                tooltip: 'Descargar',
+                              ),
                             ],
-                          ),
-                          trailing: documentoId != null
-                              ? IconButton(
-                                  icon: const Icon(Icons.download),
-                                  color: Colors.blue,
-                                  onPressed: () => _downloadPDF(documentoId, nombreArchivo),
-                                )
-                              : null,
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                          )
+                        : null,
+                    onTap: _selectionMode && documentoId != null
+                        ? () {
+                            setState(() {
+                              if (isSelected) {
+                                _selectedDocuments.remove(documentoId);
+                              } else {
+                                _selectedDocuments.add(documentoId);
+                              }
+                            });
+                          }
+                        : (documentoId != null
+                            ? () => _previewPDF(documentoId, nombreArchivo)
+                            : null),
+                  );
+                }).toList(),
               );
-            },
+            }).toList(),
           ),
-        ],
-      ),
+        );
+      },
     );
-  }
-
-  String _formatDate(String dateStr) {
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.day}/${date.month}/${date.year}';
-    } catch (e) {
-      return dateStr;
-    }
   }
 }
