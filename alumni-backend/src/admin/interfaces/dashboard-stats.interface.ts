@@ -12,4 +12,6 @@ export interface CarreraStats {
   habilitados: number;
   documentos_completos: number;
   autoevaluaciones_completas: number;
+  empleados: number;
+  desempleados: number;
 }
