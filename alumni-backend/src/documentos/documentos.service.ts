@@ -11,7 +11,7 @@ import { DocumentoResponseDto } from './dto/documento-response.dto';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { MailService } from '../mail/mail.service';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import sharp from 'sharp';
+import * as sharp from 'sharp';
 
 @Injectable()
 export class DocumentosService {
@@ -24,7 +24,7 @@ export class DocumentosService {
     private readonly supabaseService: SupabaseService,
     private readonly notificacionesService: NotificacionesService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   /**
    * Upload document to Supabase Storage
@@ -194,11 +194,17 @@ export class DocumentosService {
         return;
       }
 
-      // 2. Get egresado info for cover page
+
+      // 2. Get egresado info for cover page and filename
       const { data: egresado } = await this.supabaseService
         .getClient()
         .from('egresados')
-        .select('nombre, apellido, correo')
+        .select(`
+          nombre, 
+          apellido, 
+          correo,
+          carrera:carreras(nombre)
+        `)
         .eq('id', egresadoId)
         .single();
 
@@ -210,16 +216,50 @@ export class DocumentosService {
 
       // 5. Download and add each document
       const sortedDocs = this.sortDocuments(documents);
+      this.logger.log(`📋 Processing ${sortedDocs.length} documents in order:`);
+      sortedDocs.forEach((doc, index) => {
+        this.logger.log(`  ${index + 1}. ${doc.tipo_documento}: ${doc.nombre_archivo}`);
+      });
+
       for (const doc of sortedDocs) {
         await this.addDocumentToPDF(pdfDoc, doc);
       }
 
-      // 6. Save PDF
-      const pdfBytes = await pdfDoc.save();
+      // Log total pages before saving
+      const totalPages = pdfDoc.getPageCount();
+      this.logger.log(`📊 Total pages in PDF before saving: ${totalPages}`);
+      this.logger.log(`   Expected: 4 pages (1 cover + 3 documents)`);
 
-      // 7. Upload to storage
+      if (totalPages !== 4) {
+        this.logger.warn(`⚠️ WARNING: Expected 4 pages but got ${totalPages}`);
+      }
+
+      // 6. Save PDF with proper options to ensure all pages are written
+      this.logger.log(`💾 Saving PDF with ${totalPages} pages...`);
+      const pdfBytes = await pdfDoc.save({
+        useObjectStreams: false, // Disable object streams for better compatibility
+        addDefaultPage: false, // Don't add default page
+        objectsPerTick: Infinity, // Process all objects at once
+      });
+
+      this.logger.log(`✅ PDF saved successfully, size: ${pdfBytes.length} bytes`);
+
+      // 7. Generate descriptive filename with timestamp to avoid caching
+      const nombreCompleto = `${egresado?.nombre || ''}_${egresado?.apellido || ''}`.trim();
+      // Supabase returns carrera as an object, not an array
+      const carreraData = egresado?.carrera as any;
+      const nombreCarrera = carreraData?.nombre || 'Carrera';
+
+      // Sanitize filename (remove special characters and spaces)
+      const sanitizedNombre = nombreCompleto.replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedCarrera = nombreCarrera.replace(/[^a-zA-Z0-9]/g, '_');
+
+      // Add timestamp to make filename unique and prevent caching
       const timestamp = Date.now();
-      const filename = `unificado-${timestamp}.pdf`;
+      const filename = `Documentos_Grado_${sanitizedNombre}_${sanitizedCarrera}_${timestamp}.pdf`;
+      const displayName = `Documentos de Grado - ${nombreCompleto} - ${nombreCarrera}.pdf`;
+
+      // 8. Upload to storage
       const uid = documents[0].ruta_storage.split('/')[0]; // Extract uid from path
       const storagePath = `${uid}/${filename}`;
 
@@ -236,14 +276,14 @@ export class DocumentosService {
         return;
       }
 
-      // 8. Create database record
+      // 9. Create database record
       const { error: dbError } = await this.supabaseService
         .getClient()
         .from('documentos_egresado')
         .insert({
           egresado_id: egresadoId,
           tipo_documento: 'otro',
-          nombre_archivo: 'Documentos_Unificados.pdf',
+          nombre_archivo: displayName,
           ruta_storage: storagePath,
           tamano_bytes: pdfBytes.length,
           mime_type: 'application/pdf',
@@ -318,23 +358,35 @@ export class DocumentosService {
    */
   private async addDocumentToPDF(pdfDoc: PDFDocument, doc: any) {
     try {
+      this.logger.log(`📄 Adding document to PDF: ${doc.nombre_archivo} (${doc.tipo_documento})`);
+
       // Download file from storage
       const fileBuffer = await this.downloadFile(doc.ruta_storage);
+      this.logger.log(`✅ Downloaded file: ${doc.nombre_archivo}, size: ${fileBuffer.length} bytes`);
 
       if (doc.mime_type === 'application/pdf') {
         // Merge PDF
+        this.logger.log(`📄 Processing as PDF: ${doc.nombre_archivo}`);
         const srcDoc = await PDFDocument.load(fileBuffer);
         const copiedPages = await pdfDoc.copyPages(srcDoc, srcDoc.getPageIndices());
         copiedPages.forEach((page) => pdfDoc.addPage(page));
+        this.logger.log(`✅ PDF merged successfully: ${doc.nombre_archivo}, pages added: ${copiedPages.length}`);
       } else {
         // Convert image to PDF
+        this.logger.log(`🖼️ Processing as image: ${doc.nombre_archivo}, mime: ${doc.mime_type}`);
         const pdfBuffer = await this.convertImageToPDF(fileBuffer, doc.mime_type);
+        this.logger.log(`✅ Image converted to PDF: ${doc.nombre_archivo}, buffer size: ${pdfBuffer.length} bytes`);
+
         const srcDoc = await PDFDocument.load(pdfBuffer);
         const copiedPages = await pdfDoc.copyPages(srcDoc, srcDoc.getPageIndices());
         copiedPages.forEach((page) => pdfDoc.addPage(page));
+        this.logger.log(`✅ Image PDF merged successfully: ${doc.nombre_archivo}, pages added: ${copiedPages.length}`);
       }
     } catch (error) {
-      this.logger.error(`Error adding document to PDF: ${error.message}`);
+      this.logger.error(`❌ Error adding document to PDF: ${doc.nombre_archivo} - ${error.message}`);
+      this.logger.error(`Stack trace: ${error.stack}`);
+      // Re-throw to make the error more visible
+      throw new Error(`Failed to add document ${doc.nombre_archivo}: ${error.message}`);
     }
   }
 
@@ -358,33 +410,39 @@ export class DocumentosService {
   /**
    * Convert image to PDF
    */
-  private async convertImageToPDF(imageBuffer: Buffer, _mimeType: string): Promise<Buffer> {
-    // Process image with sharp
-    const processedImage = await sharp(imageBuffer)
-      .resize(1654, 2339, { fit: 'inside' }) // A4 size at 200 DPI
-      .toBuffer();
+  private async convertImageToPDF(imageBuffer: Buffer, mimeType: string): Promise<Buffer> {
+    try {
+      // Process image with sharp - convert to PNG for consistency
+      const processedImage = await sharp(imageBuffer)
+        .resize(1654, 2339, { fit: 'inside' }) // A4 size at 200 DPI
+        .png() // Convert to PNG
+        .toBuffer();
 
-    // Create PDF
-    const pdfDoc = await PDFDocument.create();
-    const image = await pdfDoc.embedPng(processedImage);
+      // Create PDF
+      const pdfDoc = await PDFDocument.create();
+      const image = await pdfDoc.embedPng(processedImage);
 
-    const page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
+      const page = pdfDoc.addPage();
+      const { width, height } = page.getSize();
 
-    // Calculate scale to fit image
-    const scale = Math.min(width / image.width, height / image.height);
+      // Calculate scale to fit image
+      const scale = Math.min(width / image.width, height / image.height);
 
-    const scaledWidth = image.width * scale;
-    const scaledHeight = image.height * scale;
+      const scaledWidth = image.width * scale;
+      const scaledHeight = image.height * scale;
 
-    page.drawImage(image, {
-      x: (width - scaledWidth) / 2,
-      y: (height - scaledHeight) / 2,
-      width: scaledWidth,
-      height: scaledHeight,
-    });
+      page.drawImage(image, {
+        x: (width - scaledWidth) / 2,
+        y: (height - scaledHeight) / 2,
+        width: scaledWidth,
+        height: scaledHeight,
+      });
 
-    return Buffer.from(await pdfDoc.save());
+      return Buffer.from(await pdfDoc.save());
+    } catch (error) {
+      this.logger.error(`Error converting image to PDF: ${error.message}`);
+      throw new InternalServerErrorException('Error al convertir imagen a PDF');
+    }
   }
 
   /**
@@ -464,7 +522,7 @@ export class DocumentosService {
   }
 
   /**
-   * Delete document (soft delete)
+   * Delete document (soft delete + physical file deletion)
    */
   async delete(documentoId: string, egresadoId: string) {
     // Verify document belongs to egresado
@@ -481,7 +539,21 @@ export class DocumentosService {
       throw new NotFoundException('Documento no encontrado');
     }
 
-    // Soft delete
+    // Delete physical file from storage
+    this.logger.log(`🗑️ Deleting physical file from storage: ${doc.ruta_storage}`);
+    const { error: storageError } = await this.supabaseService
+      .getClient()
+      .storage.from(this.BUCKET_NAME)
+      .remove([doc.ruta_storage]);
+
+    if (storageError) {
+      this.logger.error(`Error deleting file from storage: ${storageError.message}`);
+      // Continue with soft delete even if storage deletion fails
+    } else {
+      this.logger.log(`✅ Physical file deleted from storage: ${doc.ruta_storage}`);
+    }
+
+    // Soft delete in database
     const { error } = await this.supabaseService
       .getClient()
       .from('documentos_egresado')

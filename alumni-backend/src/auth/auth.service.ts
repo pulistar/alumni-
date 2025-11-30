@@ -83,7 +83,7 @@ export class AuthService {
     const { error } = await this.supabaseService.getClient().auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/auth/callback`,
+        emailRedirectTo: 'io.supabase.alumni://login-callback/',
       },
     });
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/constants.dart';
 
@@ -15,6 +16,8 @@ class CustomTextField extends StatefulWidget {
   final void Function(String)? onChanged;
   final bool enabled;
   final int maxLines;
+  final List<TextInputFormatter>? inputFormatters;
+  final TextCapitalization textCapitalization;
 
   const CustomTextField({
     super.key,
@@ -30,6 +33,8 @@ class CustomTextField extends StatefulWidget {
     this.onChanged,
     this.enabled = true,
     this.maxLines = 1,
+    this.inputFormatters,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -70,6 +75,8 @@ class _CustomTextFieldState extends State<CustomTextField> {
             onChanged: widget.onChanged,
             enabled: widget.enabled,
             maxLines: widget.maxLines,
+            inputFormatters: widget.inputFormatters,
+            textCapitalization: widget.textCapitalization,
             style: TextStyle(
               fontSize: 16,
               color: AppColors.textPrimary,

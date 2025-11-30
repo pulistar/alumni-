@@ -6,6 +6,8 @@ import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_event.dart';
 import '../../blocs/auth/auth_state.dart';
 import '../../widgets/custom_button.dart';
+import '../home/home_screen.dart';
+import '../profile/complete_profile_screen.dart';
 
 class MagicLinkScreen extends StatefulWidget {
   final String email;
@@ -104,14 +106,26 @@ class _MagicLinkScreenState extends State<MagicLinkScreen>
                 backgroundColor: AppColors.success,
               ),
             );
+          } else if (state is AuthenticatedWithProfile) {
+            // Usuario autenticado con perfil completo - ir al Home
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
+          } else if (state is AuthenticatedWithoutProfile) {
+            // Usuario autenticado sin perfil - ir a completar perfil
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const CompleteProfileScreen()),
+              (route) => false,
+            );
           }
         },
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(AppConstants.paddingLarge),
             child: Column(
               children: [
-                const Spacer(flex: 2),
+                const SizedBox(height: AppConstants.paddingXLarge),
                 
                 // Icono animado de email
                 FadeTransition(
@@ -239,7 +253,7 @@ class _MagicLinkScreenState extends State<MagicLinkScreen>
                   ),
                 ),
                 
-                const Spacer(flex: 3),
+                const SizedBox(height: AppConstants.paddingXLarge * 2),
                 
                 // Botones de acción
                 FadeTransition(
@@ -276,7 +290,7 @@ class _MagicLinkScreenState extends State<MagicLinkScreen>
                   ),
                 ),
                 
-                const Spacer(flex: 1),
+                const SizedBox(height: AppConstants.paddingXLarge),
               ],
             ),
           ),

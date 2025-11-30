@@ -93,6 +93,8 @@ class AuthProfileCompleted extends AuthEvent {
 // Evento para cerrar sesión
 class AuthSignOutRequested extends AuthEvent {}
 
+class AuthProfileRefreshRequested extends AuthEvent {}
+
 // Evento para refrescar perfil
 class AuthProfileRefreshed extends AuthEvent {}
 

@@ -94,4 +94,80 @@ class Validators {
     
     return null;
   }
+
+  // Validar nombre completo con primera letra en mayúscula
+  static String? fullName(String? value, [String? fieldName]) {
+    if (value == null || value.trim().isEmpty) {
+      return '${fieldName ?? 'Este campo'} es requerido';
+    }
+
+    final trimmedValue = value.trim();
+    
+    // Validar que tenga al menos 2 caracteres
+    if (trimmedValue.length < 2) {
+      return '${fieldName ?? 'Este campo'} debe tener al menos 2 caracteres';
+    }
+
+    // Validar que cada palabra empiece con mayúscula
+    final words = trimmedValue.split(' ');
+    for (var word in words) {
+      if (word.isNotEmpty && word[0] != word[0].toUpperCase()) {
+        return 'Cada palabra debe empezar con mayúscula';
+      }
+    }
+
+    return null;
+  }
+
+  // Validar ID universitario (exactamente 6 dígitos)
+  static String? universityId(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'El ID universitario es requerido';
+    }
+
+    final trimmedValue = value.trim();
+    
+    // Validar que solo contenga dígitos
+    if (!RegExp(r'^[0-9]+$').hasMatch(trimmedValue)) {
+      return 'El ID debe contener solo números';
+    }
+
+    // Validar que tenga exactamente 6 dígitos
+    if (trimmedValue.length != 6) {
+      return 'El ID debe tener exactamente 6 dígitos';
+    }
+
+    return null;
+  }
+
+  // Validar teléfono colombiano (exactamente 10 dígitos)
+  static String? colombianPhone(String? value, {bool required = true}) {
+    if (value == null || value.trim().isEmpty) {
+      return required ? 'El teléfono es requerido' : null;
+    }
+
+    final trimmedValue = value.trim();
+    
+    // Validar que solo contenga dígitos
+    if (!RegExp(r'^[0-9]+$').hasMatch(trimmedValue)) {
+      return 'El teléfono debe contener solo números';
+    }
+
+    // Validar que tenga exactamente 10 dígitos
+    if (trimmedValue.length != 10) {
+      return 'El teléfono debe tener exactamente 10 dígitos';
+    }
+
+    return null;
+  }
+
+  // Capitalizar primera letra de cada palabra
+  static String capitalizeWords(String text) {
+    if (text.isEmpty) return text;
+    
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
 }

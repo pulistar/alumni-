@@ -64,8 +64,18 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _sendMagicLink() {
     if (_formKey.currentState!.validate()) {
+      final email = _emailController.text.trim();
+      
+      // Enviar el evento al Bloc
       context.read<AuthBloc>().add(
-        AuthMagicLinkRequested(email: _emailController.text.trim()),
+        AuthMagicLinkRequested(email: email),
+      );
+      
+      // Navegar inmediatamente a MagicLinkScreen sin esperar el estado
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => MagicLinkScreen(email: email),
+        ),
       );
     }
   }
@@ -76,13 +86,9 @@ class _LoginScreenState extends State<LoginScreen>
       backgroundColor: AppColors.background,
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthMagicLinkSent) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => MagicLinkScreen(email: state.email),
-              ),
-            );
-          } else if (state is AuthError) {
+          // Solo manejar errores, la navegación se hace directamente en _sendMagicLink
+          if (state is AuthError) {
+            print('❌ LoginScreen: Error = ${state.message}');
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),

@@ -36,8 +36,8 @@ class DevelopmentEnvironment implements AppEnvironment {
   
   @override
   String get apiBaseUrl {
-    // Configurado para tu dispositivo físico
-    return 'http://192.168.20.53:3000/api'; // ✅ Tu IP configurada
+    // Configurado para ngrok (desarrollo)
+    return 'https://aditya-pedimented-adela.ngrok-free.dev/api'; // ✅ URL de ngrok
   }
   
   @override

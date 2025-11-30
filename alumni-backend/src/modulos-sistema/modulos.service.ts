@@ -18,9 +18,30 @@ export class ModulosService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   /**
-   * Get all application modules ordered by 'orden'
+   * Get all active application modules ordered by 'orden'
+   * Only returns modules where activo = true for mobile app
    */
   async getModulosApp(): Promise<ModuloApp[]> {
+    const { data: modulos, error } = await this.supabaseService
+      .getClient()
+      .from('modulos')
+      .select('*')
+      .eq('activo', true)  // 🔥 Solo módulos activos
+      .order('orden', { ascending: true });
+
+    if (error) {
+      this.logger.error(`Error fetching active modules: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener módulos activos de la aplicación');
+    }
+
+    this.logger.log(`Found ${modulos?.length || 0} active modules`);
+    return modulos || [];
+  }
+
+  /**
+   * Get ALL modules (active and inactive) for admin panel
+   */
+  async getAllModulos(): Promise<ModuloApp[]> {
     const { data: modulos, error } = await this.supabaseService
       .getClient()
       .from('modulos')
@@ -28,10 +49,11 @@ export class ModulosService {
       .order('orden', { ascending: true });
 
     if (error) {
-      this.logger.error(`Error fetching modules: ${error.message}`);
-      throw new InternalServerErrorException('Error al obtener módulos de la aplicación');
+      this.logger.error(`Error fetching all modules: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener todos los módulos');
     }
 
+    this.logger.log(`Found ${modulos?.length || 0} total modules`);
     return modulos || [];
   }
 }

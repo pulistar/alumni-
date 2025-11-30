@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/utils/text_formatters.dart';
+import '../../../data/services/auth_service.dart';
 import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_event.dart';
 import '../../blocs/auth/auth_state.dart';
@@ -42,6 +45,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
   int _currentPage = 0;
   String? _selectedCarreraId;
   String? _selectedEstadoLaboralId;
+  List<Map<String, dynamic>> _carreras = [];
+  List<Map<String, dynamic>> _estadosLaborales = [];
+  bool _isLoadingCarreras = true;
+  bool _isLoadingEstadosLaborales = true;
   
   // Animaciones
   late AnimationController _animationController;
@@ -68,6 +75,56 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     
     // Valores por defecto
     _paisController.text = 'Colombia';
+    
+    // Cargar carreras y estados laborales
+    _loadCarreras();
+    _loadEstadosLaborales();
+  }
+
+  Future<void> _loadCarreras() async {
+    try {
+      final authService = context.read<AuthService>();
+      final carreras = await authService.getCarreras();
+      setState(() {
+        _carreras = carreras;
+        _isLoadingCarreras = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingCarreras = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error cargando carreras: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadEstadosLaborales() async {
+    try {
+      final authService = context.read<AuthService>();
+      final estadosLaborales = await authService.getEstadosLaborales();
+      setState(() {
+        _estadosLaborales = estadosLaborales;
+        _isLoadingEstadosLaborales = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingEstadosLaborales = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error cargando estados laborales: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -90,8 +147,99 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     super.dispose();
   }
 
+  bool _validateCurrentPage() {
+    print('🔍 Validando página $_currentPage');
+    
+    // Validar página 1: Información Personal
+    if (_currentPage == 0) {
+      print('📝 Nombre: "${_nombreController.text}"');
+      print('📝 Apellido: "${_apellidoController.text}"');
+      print('📝 ID: "${_idUniversitarioController.text}"');
+      print('📝 Teléfono: "${_telefonoController.text}"');
+      print('📝 Ciudad: "${_ciudadController.text}"');
+      print('📝 Carrera ID: $_selectedCarreraId');
+      
+      if (_nombreController.text.trim().isEmpty ||
+          _apellidoController.text.trim().isEmpty ||
+          _idUniversitarioController.text.trim().isEmpty ||
+          _telefonoController.text.trim().isEmpty ||
+          _ciudadController.text.trim().isEmpty ||
+          _selectedCarreraId == null) {
+        print('❌ Faltan campos obligatorios');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor completa todos los campos obligatorios'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
+      
+      // Validar formato de nombre
+      final nombreError = Validators.fullName(_nombreController.text, 'El nombre');
+      if (nombreError != null) {
+        print('❌ Error en nombre: $nombreError');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(nombreError),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
+      
+      // Validar formato de apellido
+      final apellidoError = Validators.fullName(_apellidoController.text, 'El apellido');
+      if (apellidoError != null) {
+        print('❌ Error en apellido: $apellidoError');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(apellidoError),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
+      
+      // Validar ID universitario
+      final idError = Validators.universityId(_idUniversitarioController.text);
+      if (idError != null) {
+        print('❌ Error en ID: $idError');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(idError),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
+      
+      // Validar teléfono
+      final telefonoError = Validators.colombianPhone(_telefonoController.text);
+      if (telefonoError != null) {
+        print('❌ Error en teléfono: $telefonoError');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(telefonoError),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
+      
+      print('✅ Validación página 0 exitosa');
+    }
+    
+    return true;
+  }
+
   void _nextPage() {
     if (_currentPage < 2) {
+      // Validar antes de avanzar
+      if (!_validateCurrentPage()) {
+        return;
+      }
+      
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -308,14 +456,46 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
               color: AppColors.textSecondary,
             ),
           ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.paddingMedium,
+              vertical: AppConstants.paddingSmall,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: AppConstants.paddingSmall),
+                Text(
+                  'Los campos con * son obligatorios',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppConstants.paddingXLarge),
           
           CustomTextField(
             controller: _nombreController,
             label: 'Nombres *',
             hint: 'Ingresa tus nombres',
-            validator: (value) => Validators.required(value, 'Los nombres'),
+            validator: (value) => Validators.fullName(value, 'Los nombres'),
             prefixIcon: Icons.person_outline,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
@@ -323,36 +503,105 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
             controller: _apellidoController,
             label: 'Apellidos *',
             hint: 'Ingresa tus apellidos',
-            validator: (value) => Validators.required(value, 'Los apellidos'),
+            validator: (value) => Validators.fullName(value, 'Los apellidos'),
             prefixIcon: Icons.person_outline,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
             controller: _idUniversitarioController,
             label: 'ID Universitario *',
-            hint: 'Ej: 2019123456',
-            validator: (value) => Validators.required(value, 'El ID universitario'),
+            hint: 'Ej: 123456 (6 dígitos)',
+            validator: (value) => Validators.universityId(value),
             prefixIcon: Icons.badge_outlined,
+            keyboardType: TextInputType.number,
+            inputFormatters: [DigitsOnlyFormatter(maxLength: 6)],
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
             controller: _telefonoController,
             label: 'Teléfono *',
-            hint: 'Ej: +57 300 123 4567',
+            hint: 'Ej: 3001234567 (10 dígitos)',
             keyboardType: TextInputType.phone,
-            validator: (value) => Validators.required(value, 'El teléfono'),
+            validator: (value) => Validators.colombianPhone(value),
             prefixIcon: Icons.phone_outlined,
+            inputFormatters: [DigitsOnlyFormatter(maxLength: 10)],
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
             controller: _telefonoAlternativoController,
-            label: 'Teléfono Alternativo (Opcional)',
-            hint: 'Teléfono adicional',
+            label: 'Teléfono Alternativo',
+            hint: 'Teléfono adicional (Opcional)',
             keyboardType: TextInputType.phone,
+            validator: (value) => Validators.colombianPhone(value, required: false),
             prefixIcon: Icons.phone_outlined,
+            inputFormatters: [DigitsOnlyFormatter(maxLength: 10)],
+          ),
+          const SizedBox(height: AppConstants.paddingLarge),
+          
+          CustomTextField(
+            controller: _ciudadController,
+            label: 'Ciudad *',
+            hint: 'Ciudad donde estudiaste',
+            validator: (value) => Validators.required(value, 'La ciudad'),
+            prefixIcon: Icons.location_city_outlined,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: AppConstants.paddingLarge),
+          
+          // Dropdown de carreras - OBLIGATORIO
+          Container(
+            padding: const EdgeInsets.all(AppConstants.paddingMedium),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+              border: Border.all(color: AppColors.surfaceVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Carrera *',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppConstants.paddingSmall),
+                _isLoadingCarreras
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppConstants.paddingMedium),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedCarreraId,
+                        decoration: const InputDecoration(
+                          hintText: 'Selecciona tu carrera',
+                          border: InputBorder.none,
+                        ),
+                        items: _carreras.map((carrera) {
+                          return DropdownMenuItem<String>(
+                            value: carrera['id'] as String,
+                            child: Text(carrera['nombre'] as String),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCarreraId = value;
+                          });
+                        },
+                        validator: (value) => value == null ? 'La carrera es obligatoria' : null,
+                      ),
+              ],
+            ),
           ),
         ],
       ),
@@ -380,91 +629,55 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: AppConstants.paddingXLarge),
-          
-          // Dropdown de carreras - OBLIGATORIO
+          const SizedBox(height: AppConstants.paddingSmall),
           Container(
-            padding: const EdgeInsets.all(AppConstants.paddingMedium),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-              border: Border.all(color: AppColors.surfaceVariant),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.paddingMedium,
+              vertical: AppConstants.paddingSmall,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Carrera *',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.primary,
                 ),
-                const SizedBox(height: AppConstants.paddingSmall),
-                DropdownButtonFormField<String>(
-                  value: _selectedCarreraId,
-                  decoration: const InputDecoration(
-                    hintText: 'Selecciona tu carrera',
-                    border: InputBorder.none,
+                const SizedBox(width: AppConstants.paddingSmall),
+                Text(
+                  'Los campos con * son obligatorios',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
                   ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'carrera1',
-                      child: Text('Ingeniería de Sistemas'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'carrera2',
-                      child: Text('Administración de Empresas'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'carrera3',
-                      child: Text('Contaduría Pública'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'carrera4',
-                      child: Text('Derecho'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'carrera5',
-                      child: Text('Psicología'),
-                    ),
-                    // TODO: Cargar desde API
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedCarreraId = value;
-                    });
-                  },
-                  validator: (value) => value == null ? 'La carrera es obligatoria' : null,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: AppConstants.paddingLarge),
-          
-          CustomTextField(
-            controller: _ciudadController,
-            label: 'Ciudad *',
-            hint: 'Ciudad donde estudiaste',
-            validator: (value) => Validators.required(value, 'La ciudad'),
-            prefixIcon: Icons.location_city_outlined,
-          ),
-          const SizedBox(height: AppConstants.paddingLarge),
+          const SizedBox(height: AppConstants.paddingXLarge),
           
           CustomTextField(
             controller: _paisController,
-            label: 'País (Opcional)',
-            hint: 'País donde estudiaste',
+            label: 'País',
+            hint: 'País donde estudiaste (Opcional)',
             prefixIcon: Icons.public_outlined,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
             controller: _direccionController,
-            label: 'Dirección (Opcional)',
-            hint: 'Dirección actual',
+            label: 'Dirección',
+            hint: 'Dirección actual (Opcional)',
             prefixIcon: Icons.home_outlined,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
           ),
         ],
       ),
@@ -492,6 +705,36 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
               color: AppColors.textSecondary,
             ),
           ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.paddingMedium,
+              vertical: AppConstants.paddingSmall,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.success.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: AppColors.success,
+                ),
+                const SizedBox(width: AppConstants.paddingSmall),
+                Text(
+                  'Todos los campos de esta página son opcionales',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppConstants.paddingXLarge),
           
           // Estado laboral
@@ -506,7 +749,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Estado Laboral (Opcional)',
+                  'Estado Laboral',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -514,36 +757,31 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                   ),
                 ),
                 const SizedBox(height: AppConstants.paddingSmall),
-                DropdownButtonFormField<String>(
-                  value: _selectedEstadoLaboralId,
-                  decoration: const InputDecoration(
-                    hintText: 'Selecciona tu estado laboral',
-                    border: InputBorder.none,
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'empleado',
-                      child: Text('Empleado'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'independiente',
-                      child: Text('Trabajador Independiente'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'desempleado',
-                      child: Text('Desempleado'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'estudiando',
-                      child: Text('Estudiando'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedEstadoLaboralId = value;
-                    });
-                  },
-                ),
+                _isLoadingEstadosLaborales
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppConstants.paddingMedium),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedEstadoLaboralId,
+                        decoration: const InputDecoration(
+                          hintText: 'Selecciona tu estado laboral',
+                          border: InputBorder.none,
+                        ),
+                        items: _estadosLaborales.map((estado) {
+                          return DropdownMenuItem<String>(
+                            value: estado['id'] as String,
+                            child: Text(estado['nombre'] as String),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedEstadoLaboralId = value;
+                          });
+                        },
+                      ),
               ],
             ),
           ),
@@ -551,17 +789,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
           
           CustomTextField(
             controller: _empresaActualController,
-            label: 'Empresa Actual (Opcional)',
-            hint: 'Nombre de tu empresa',
+            label: 'Empresa Actual',
+            hint: 'Nombre de tu empresa (Opcional)',
             prefixIcon: Icons.business_outlined,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
             controller: _cargoActualController,
-            label: 'Cargo Actual (Opcional)',
-            hint: 'Tu cargo o posición',
+            label: 'Cargo Actual',
+            hint: 'Tu cargo o posición (Opcional)',
             prefixIcon: Icons.work_outline,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: AppConstants.paddingXLarge),
           

@@ -42,4 +42,16 @@ export class EgresadosController {
   async deleteProfile(@CurrentUser() user: ICurrentUser) {
     return this.egresadosService.delete(user.id);
   }
+
+  @Get('carreras')
+  @HttpCode(HttpStatus.OK)
+  async getCarreras() {
+    return this.egresadosService.getCarreras();
+  }
+
+  @Get('estados-laborales')
+  @HttpCode(HttpStatus.OK)
+  async getEstadosLaborales() {
+    return this.egresadosService.getEstadosLaborales();
+  }
 }

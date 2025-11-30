@@ -20,6 +20,7 @@ class AuthBloc extends Bloc<AuthEvent, auth.AuthState> {
     on<AuthOTPVerified>(_onOTPVerified);
     on<AuthProfileCompleted>(_onProfileCompleted);
     on<AuthSignOutRequested>(_onSignOutRequested);
+    on<AuthProfileRefreshRequested>(_onProfileRefreshRequested);
     on<AuthProfileRefreshed>(_onProfileRefreshed);
     on<AuthStateChanged>(_onAuthStateChanged);
 
@@ -75,12 +76,17 @@ class AuthBloc extends Bloc<AuthEvent, auth.AuthState> {
     AuthMagicLinkRequested event,
     Emitter<auth.AuthState> emit,
   ) async {
+    print('🔐 AuthBloc: Solicitando magic link para ${event.email}');
     emit(auth.AuthLoading());
 
     try {
       await _authService.sendMagicLink(event.email);
+      print('✅ AuthBloc: Magic link enviado exitosamente');
+      print('📤 AuthBloc: Emitiendo AuthMagicLinkSent para ${event.email}');
       emit(auth.AuthMagicLinkSent(email: event.email));
+      print('✅ AuthBloc: Estado AuthMagicLinkSent emitido');
     } catch (e) {
+      print('❌ AuthBloc: Error enviando magic link: $e');
       emit(auth.AuthError(message: e.toString()));
     }
   }
@@ -167,17 +173,48 @@ class AuthBloc extends Bloc<AuthEvent, auth.AuthState> {
     AuthSignOutRequested event,
     Emitter<auth.AuthState> emit,
   ) async {
-    emit(auth.AuthLoading());
+    print('🚪 AuthBloc: Cerrando sesión...');
 
     try {
       await _authService.signOut();
+      print('✅ AuthBloc: Sesión cerrada exitosamente');
+      // NO emitir AuthLoading, ir directo a AuthUnauthenticated
       emit(auth.AuthUnauthenticated());
+      print('✅ AuthBloc: Estado AuthUnauthenticated emitido');
     } catch (e) {
+      print('❌ AuthBloc: Error cerrando sesión: $e');
       emit(auth.AuthError(message: e.toString()));
     }
   }
 
-  // Refrescar perfil
+  // Refrescar perfil manualmente
+  Future<void> _onProfileRefreshRequested(
+    AuthProfileRefreshRequested event,
+    Emitter<auth.AuthState> emit,
+  ) async {
+    if (state is! auth.AuthenticatedWithProfile) return;
+
+    final currentState = state as auth.AuthenticatedWithProfile;
+    print('🔄 AuthBloc: Refrescando perfil del usuario...');
+
+    try {
+      // Obtener perfil actualizado desde el servidor
+      final updatedProfile = await _authService.getEgresadoProfile();
+      
+      if (updatedProfile != null) {
+        print('✅ AuthBloc: Perfil actualizado - habilitado: ${updatedProfile.habilitado}');
+        emit(auth.AuthenticatedWithProfile(
+          user: currentState.user,
+          egresado: updatedProfile,
+        ));
+      }
+    } catch (e) {
+      print('❌ AuthBloc: Error refrescando perfil: $e');
+      // No emitir error, mantener estado actual
+    }
+  }
+
+  // Refrescar perfil automático
   Future<void> _onProfileRefreshed(
     AuthProfileRefreshed event,
     Emitter<auth.AuthState> emit,

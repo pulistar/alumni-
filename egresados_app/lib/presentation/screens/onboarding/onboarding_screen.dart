@@ -4,7 +4,12 @@ import '../../../core/utils/constants.dart';
 import '../auth/login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final VoidCallback? onComplete;
+  
+  const OnboardingScreen({
+    super.key,
+    this.onComplete,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -64,6 +69,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _navigateToLogin() {
+    // Si hay un callback, usarlo en lugar de navegar
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+      return;
+    }
+    
+    // Si no hay callback, navegar normalmente
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),

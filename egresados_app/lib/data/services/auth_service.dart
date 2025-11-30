@@ -46,32 +46,32 @@ class AuthService {
   // Enviar Magic Link
   Future<AuthResponse> sendMagicLink(String email) async {
     try {
-      // Primero intentar con el backend
+      print('📧 Enviando magic link a: $email');
+      print('📧 URL: ${ApiConfig.baseUrl}${ApiConfig.auth}/magic-link');
+      
+      // Enviar solicitud al backend, que se encarga de llamar a Supabase
       final response = await _dio.post(
         ApiConfig.auth + '/magic-link',
         data: {'email': email},
       );
 
+      print('📧 Respuesta: ${response.statusCode}');
+      print('📧 Data: ${response.data}');
+
       if (response.statusCode == 200) {
-        // Si el backend responde OK, usar Supabase para enviar el magic link
-        await _supabase.auth.signInWithOtp(
-          email: email,
-          emailRedirectTo: 'io.supabase.alumni://login-callback/',
-        );
         return AuthResponse();
       } else {
         throw Exception('Error del servidor: ${response.statusCode}');
       }
     } on DioException catch (e) {
-      // Si falla el backend, usar Supabase directamente
-      print('Backend no disponible, usando Supabase directamente: ${e.message}');
-      
-      await _supabase.auth.signInWithOtp(
-        email: email,
-        emailRedirectTo: 'io.supabase.alumni://login-callback/',
-      );
-      return AuthResponse();
+      print('❌ DioException: ${e.message}');
+      print('❌ Response: ${e.response?.data}');
+      print('❌ Status: ${e.response?.statusCode}');
+      // Propagar el error del backend al caller para que pueda mostrar un mensaje adecuado
+      final backendMessage = e.response?.data ?? e.message;
+      throw Exception('Error enviando magic link: $backendMessage');
     } catch (e) {
+      print('❌ Error general: $e');
       throw Exception('Error enviando magic link: $e');
     }
   }
@@ -212,6 +212,40 @@ class AuthService {
       return await _supabase.auth.refreshSession();
     } catch (e) {
       throw Exception('Error refrescando sesión: $e');
+    }
+  }
+
+  // Obtener lista de carreras
+  Future<List<Map<String, dynamic>>> getCarreras() async {
+    try {
+      final response = await _dio.get(
+        ApiConfig.egresados + '/carreras',
+      );
+
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(response.data);
+      } else {
+        throw Exception('Error del servidor: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Error obteniendo carreras: ${e.response?.data ?? e.message}');
+    }
+  }
+
+  // Obtener lista de estados laborales
+  Future<List<Map<String, dynamic>>> getEstadosLaborales() async {
+    try {
+      final response = await _dio.get(
+        ApiConfig.egresados + '/estados-laborales',
+      );
+
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(response.data);
+      } else {
+        throw Exception('Error del servidor: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Error obteniendo estados laborales: ${e.response?.data ?? e.message}');
     }
   }
 }

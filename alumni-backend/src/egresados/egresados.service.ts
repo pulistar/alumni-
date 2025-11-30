@@ -137,4 +137,40 @@ export class EgresadosService {
     this.logger.log(`Profile soft deleted for uid: ${uid}`);
     return { message: 'Perfil eliminado exitosamente' };
   }
+
+  /**
+   * Get all carreras
+   */
+  async getCarreras() {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('carreras')
+      .select('id, nombre, codigo')
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      this.logger.error(`Error fetching carreras: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener las carreras');
+    }
+
+    return data;
+  }
+
+  /**
+   * Get all estados laborales
+   */
+  async getEstadosLaborales() {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('estados_laborales')
+      .select('id, nombre')
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      this.logger.error(`Error fetching estados laborales: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener los estados laborales');
+    }
+
+    return data;
+  }
 }
