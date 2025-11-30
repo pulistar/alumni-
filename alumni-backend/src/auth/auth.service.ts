@@ -14,7 +14,7 @@ export class AuthService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   /**
    * Authenticate Admin using Email and Password
@@ -68,6 +68,78 @@ export class AuthService {
         role: admin.rol,
         nombre: admin.nombre,
         apellido: admin.apellido,
+      },
+    };
+  }
+
+  /**
+   * Register new administrator
+   * @param registerDto RegisterDto
+   * @returns AuthResponseDto with JWT token
+   */
+  async register(registerDto: any): Promise<AuthResponseDto> {
+    const { correo, nombre, apellido, password, confirmPassword } = registerDto;
+
+    // 1. Validate passwords match
+    if (password !== confirmPassword) {
+      throw new BadRequestException('Las contraseñas no coinciden');
+    }
+
+    // 2. Check if email already exists
+    const { data: existingAdmin } = await this.supabaseService
+      .getClient()
+      .from('administradores')
+      .select('id')
+      .eq('correo', correo)
+      .single();
+
+    if (existingAdmin) {
+      throw new BadRequestException('El correo electrónico ya está registrado');
+    }
+
+    // 3. Hash password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // 4. Create new admin
+    const { data: newAdmin, error } = await this.supabaseService
+      .getClient()
+      .from('administradores')
+      .insert({
+        correo,
+        nombre,
+        apellido,
+        password_hash: passwordHash,
+        rol: 'admin',
+        activo: true,
+      })
+      .select()
+      .single();
+
+    if (error || !newAdmin) {
+      this.logger.error(`Error creating admin: ${error?.message}`);
+      throw new BadRequestException('Error al crear la cuenta');
+    }
+
+    // 5. Generate JWT
+    const payload: ITokenPayload = {
+      sub: newAdmin.id,
+      email: newAdmin.correo,
+      role: newAdmin.rol,
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+
+    this.logger.log(`New admin registered: ${correo}`);
+
+    return {
+      accessToken,
+      user: {
+        id: newAdmin.id,
+        email: newAdmin.correo,
+        role: newAdmin.rol,
+        nombre: newAdmin.nombre,
+        apellido: newAdmin.apellido,
       },
     };
   }

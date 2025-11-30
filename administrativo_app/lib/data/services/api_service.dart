@@ -46,6 +46,49 @@ class ApiService {
     }
   }
 
+  /// Register new administrator
+  Future<AuthResponse> register(String nombre, String apellido, String correo, String password) async {
+    try {
+      print('🔵 Intentando registro a: ${ApiConfig.baseUrl}/auth/register');
+      print('🔵 Email: $correo');
+      
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nombre': nombre,
+          'apellido': apellido,
+          'correo': correo,
+          'password': password,
+          'confirmPassword': password,
+        }),
+      );
+
+      print('🔵 Status Code: ${response.statusCode}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+        return AuthResponse.fromJson(jsonResponse);
+      } else if (response.statusCode == 400) {
+        try {
+          final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+          final message = jsonResponse['message'] as String? ?? 'Error en el registro';
+          throw Exception(message);
+        } catch (e) {
+          throw Exception('Error en el registro');
+        }
+      } else {
+        throw Exception('Error al registrarse. Código: ${response.statusCode}');
+      }
+    } on http.ClientException catch (e) {
+      print('❌ Error de conexión: $e');
+      throw Exception('No se puede conectar al servidor');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error de conexión');
+    }
+  }
+
   /// Get all modules
   Future<List<Module>> getModules({String? token}) async {
     try {
