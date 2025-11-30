@@ -137,6 +137,116 @@ class ApiService {
     }
   }
 
+  /// Get distribution of egresados by career
+  Future<List<dynamic>> getDistribucionCarrera(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/distribucion-carrera'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener distribución por carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener distribución');
+    }
+  }
+
+  /// Get employment rate
+  Future<Map<String, dynamic>> getTasaEmpleabilidad(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/tasa-empleabilidad'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Error al obtener tasa de empleabilidad');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener tasa de empleabilidad');
+    }
+  }
+
+  /// Get employment by career
+  Future<List<dynamic>> getEmpleabilidadCarrera(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/empleabilidad-carrera'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener empleabilidad por carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener empleabilidad');
+    }
+  }
+
+  /// Get process funnel
+  Future<List<dynamic>> getEmbudoProceso(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/embudo-proceso'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener embudo de proceso');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener embudo');
+    }
+  }
+
+  /// Get competencies radar
+  Future<List<dynamic>> getRadarCompetencias(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/radar-competencias'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener radar de competencias');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener radar');
+    }
+  }
+
   /// Get egresados list with filters
   Future<Map<String, dynamic>> getEgresados({
     required String token,

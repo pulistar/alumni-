@@ -85,6 +85,41 @@ export class AdminController {
     return this.adminService.getDashboardStats();
   }
 
+  @Get('analytics/distribucion-carrera')
+  @ApiOperation({ summary: 'Obtener distribución de egresados por carrera' })
+  @ApiResponse({ status: 200, description: 'Distribución por carrera' })
+  async getDistribucionCarrera() {
+    return this.adminService.getDistribucionPorCarrera();
+  }
+
+  @Get('analytics/tasa-empleabilidad')
+  @ApiOperation({ summary: 'Obtener tasa de empleabilidad general' })
+  @ApiResponse({ status: 200, description: 'Tasa de empleabilidad' })
+  async getTasaEmpleabilidad() {
+    return this.adminService.getTasaEmpleabilidad();
+  }
+
+  @Get('analytics/empleabilidad-carrera')
+  @ApiOperation({ summary: 'Obtener empleabilidad por carrera' })
+  @ApiResponse({ status: 200, description: 'Empleabilidad por carrera' })
+  async getEmpleabilidadCarrera() {
+    return this.adminService.getEmpleabilidadPorCarrera();
+  }
+
+  @Get('analytics/embudo-proceso')
+  @ApiOperation({ summary: 'Obtener embudo del proceso de grado' })
+  @ApiResponse({ status: 200, description: 'Embudo de proceso' })
+  async getEmbudoProceso() {
+    return this.adminService.getEmbudoProceso();
+  }
+
+  @Get('analytics/radar-competencias')
+  @ApiOperation({ summary: 'Obtener radar de competencias' })
+  @ApiResponse({ status: 200, description: 'Radar de competencias' })
+  async getRadarCompetencias() {
+    return this.adminService.getRadarCompetencias();
+  }
+
   @Patch('egresados/:id/habilitar')
   @ApiOperation({ summary: 'Habilitar/deshabilitar egresado' })
   @ApiResponse({ status: 200, description: 'Egresado actualizado' })
