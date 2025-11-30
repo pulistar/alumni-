@@ -31,9 +31,9 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 @ApiBearerAuth('JWT-auth')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('admin', 'superadmin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(private readonly adminService: AdminService) { }
 
   @Get('egresados/search')
   @ApiOperation({ summary: 'Búsqueda avanzada de egresados' })
@@ -141,6 +141,33 @@ export class AdminController {
 
     res.send(buffer);
   }
+
+  @Get('reportes/pdfs-unificados')
+  @ApiOperation({ summary: 'Obtener lista de PDFs unificados por carrera' })
+  @ApiQuery({ name: 'carrera', required: false, description: 'Filtrar por carrera' })
+  @ApiResponse({ status: 200, description: 'Lista de egresados con PDF unificado' })
+  async getPDFsUnificados(@Query('carrera') carrera?: string) {
+    return this.adminService.getPDFsUnificados(carrera);
+  }
+
+  @Get('documentos/:documentoId/download')
+  @ApiOperation({ summary: 'Descargar archivo de documento' })
+  @ApiResponse({ status: 200, description: 'Archivo descargado' })
+  async downloadDocumento(
+    @Param('documentoId') documentoId: string,
+    @Res() res: any,
+  ) {
+    const { buffer, filename, mimeType } = await this.adminService.downloadDocumento(documentoId);
+
+    res.set({
+      'Content-Type': mimeType || 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+
+    res.send(buffer);
+  }
+
 
   // ==================== CRUD DE PREGUNTAS ====================
 

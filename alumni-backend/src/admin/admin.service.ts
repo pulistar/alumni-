@@ -24,7 +24,7 @@ export class AdminService {
     private readonly supabaseService: SupabaseService,
     private readonly notificacionesService: NotificacionesService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   /**
    * Get paginated list of egresados with filters
@@ -314,7 +314,7 @@ export class AdminService {
 
     const { data: egresadosAll } = await client
       .from('egresados')
-      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada')
+      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral')
       .is('deleted_at', null);
 
     const resumenPorCarreraMap = new Map<
@@ -324,6 +324,8 @@ export class AdminService {
         habilitados: number;
         documentos_completos: number;
         autoevaluaciones_completas: number;
+        empleados: number;
+        desempleados: number;
       }
     >();
 
@@ -334,11 +336,22 @@ export class AdminService {
         habilitados: 0,
         documentos_completos: 0,
         autoevaluaciones_completas: 0,
+        empleados: 0,
+        desempleados: 0,
       };
       curr.total++;
       if (e.habilitado) curr.habilitados++;
       if (e.proceso_grado_completo) curr.documentos_completos++;
       if (e.autoevaluacion_completada) curr.autoevaluaciones_completas++;
+
+      // Employment stats
+      const estado = e.estado_laboral?.toLowerCase() || '';
+      if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
+        curr.empleados++;
+      } else if (estado === 'desempleado') {
+        curr.desempleados++;
+      }
+
       resumenPorCarreraMap.set(cid, curr);
     });
 
@@ -348,6 +361,8 @@ export class AdminService {
         habilitados: 0,
         documentos_completos: 0,
         autoevaluaciones_completas: 0,
+        empleados: 0,
+        desempleados: 0,
       };
       return {
         carrera: c.nombre,
@@ -355,6 +370,8 @@ export class AdminService {
         habilitados: stat.habilitados || 0,
         documentos_completos: stat.documentos_completos || 0,
         autoevaluaciones_completas: stat.autoevaluaciones_completas || 0,
+        empleados: stat.empleados || 0,
+        desempleados: stat.desempleados || 0,
       };
     });
 
@@ -782,6 +799,159 @@ export class AdminService {
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
   }
+
+  /**
+   * Get list of egresados with graduation documents (Documentos de Grado), optionally filtered by career
+   */
+  async getPDFsUnificados(carrera?: string) {
+    try {
+      const client = this.supabaseService.getClient();
+
+      // Query documentos_egresado table - showing ALL documents for now
+      let query = client
+        .from('documentos_egresado')
+        .select(`
+          id,
+          egresado_id,
+          tipo_documento,
+          nombre_archivo,
+          ruta_storage,
+          created_at,
+          egresados (
+            id,
+            nombre,
+            apellido,
+            correo,
+            carrera_id,
+            carreras (nombre)
+          )
+        `)
+        // Temporarily removed filter to debug
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await query;
+
+      if (error) {
+        this.logger.error(`Error fetching graduation documents: ${error.message}`);
+        throw new InternalServerErrorException('Error al obtener documentos de grado');
+      }
+
+      // Filter by career if provided
+      let filteredData = data || [];
+      if (carrera) {
+        filteredData = filteredData.filter(
+          (doc: any) => doc.egresados?.carreras?.nombre === carrera
+        );
+      }
+
+      // Group by career
+      const groupedByCarrera = filteredData.reduce((acc: any, doc: any) => {
+        const carreraName = doc.egresados?.carreras?.nombre || 'Sin carrera';
+
+        if (!acc[carreraName]) {
+          acc[carreraName] = [];
+        }
+
+        // Generate public URL from storage path
+        const { data: urlData } = client.storage
+          .from('egresados-documentos')
+          .getPublicUrl(doc.ruta_storage);
+
+        const publicUrl = urlData?.publicUrl || null;
+        this.logger.log(`Generated URL for ${doc.nombre_archivo}: ${publicUrl}`);
+
+        acc[carreraName].push({
+          id: doc.id,
+          egresado_id: doc.egresado_id,
+          egresado_nombre: `${doc.egresados?.nombre || ''} ${doc.egresados?.apellido || ''}`.trim(),
+          egresado_correo: doc.egresados?.correo,
+          tipo_documento: doc.tipo_documento,
+          nombre_archivo: doc.nombre_archivo,
+          url_publica: publicUrl,
+          fecha_generacion: doc.created_at,
+        });
+
+        return acc;
+      }, {});
+
+      return {
+        total: filteredData.length,
+        por_carrera: Object.entries(groupedByCarrera).map(([carrera, documentos]) => ({
+          carrera,
+          total: (documentos as any[]).length,
+          documentos,
+        })),
+      };
+    } catch (error) {
+      this.logger.error(`Error in getPDFsUnificados: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Download documento file from Supabase Storage
+   */
+  async downloadDocumento(documentoId: string) {
+    try {
+      const client = this.supabaseService.getClient();
+
+      // Get documento info
+      const { data: documento, error: docError } = await client
+        .from('documentos_egresado')
+        .select('ruta_storage, nombre_archivo, mime_type')
+        .eq('id', documentoId)
+        .single();
+
+      if (docError || !documento) {
+        this.logger.error(`Documento not found: ${documentoId}`);
+        throw new NotFoundException('Documento no encontrado');
+      }
+
+      this.logger.log(`=== DOCUMENTO INFO ===`);
+      this.logger.log(`ID: ${documentoId}`);
+      this.logger.log(`Nombre archivo: ${documento.nombre_archivo}`);
+      this.logger.log(`Ruta storage: "${documento.ruta_storage}"`);
+      this.logger.log(`Mime type: ${documento.mime_type}`);
+      this.logger.log(`======================`);
+      this.logger.log(`Creating signed URL for path: ${documento.ruta_storage}`);
+
+      // Create a signed URL (valid for 60 seconds)
+      const { data: urlData, error: urlError } = await client.storage
+        .from('egresados-documentos')
+        .createSignedUrl(documento.ruta_storage, 60);
+
+      if (urlError || !urlData) {
+        this.logger.error(`Error creating signed URL: ${JSON.stringify(urlError)}`);
+        throw new InternalServerErrorException('Error al generar URL de descarga');
+      }
+
+      this.logger.log(`Signed URL created: ${urlData.signedUrl}`);
+
+      // Download file using fetch
+      const response = await fetch(urlData.signedUrl);
+
+      if (!response.ok) {
+        this.logger.error(`HTTP error downloading file: ${response.status} ${response.statusText}`);
+        throw new InternalServerErrorException(`Error HTTP ${response.status} al descargar archivo`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      this.logger.log(`File downloaded successfully, size: ${buffer.length} bytes`);
+
+      return {
+        buffer,
+        filename: documento.nombre_archivo,
+        mimeType: documento.mime_type || 'application/pdf',
+      };
+    } catch (error) {
+      this.logger.error(`Error in downloadDocumento: ${error.message}`);
+      throw error;
+    }
+  }
+
+
 
   // ==================== CRUD DE PREGUNTAS ====================
 
