@@ -46,6 +46,49 @@ class ApiService {
     }
   }
 
+  /// Register new administrator
+  Future<AuthResponse> register(String nombre, String apellido, String correo, String password) async {
+    try {
+      print('🔵 Intentando registro a: ${ApiConfig.baseUrl}/auth/register');
+      print('🔵 Email: $correo');
+      
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nombre': nombre,
+          'apellido': apellido,
+          'correo': correo,
+          'password': password,
+          'confirmPassword': password,
+        }),
+      );
+
+      print('🔵 Status Code: ${response.statusCode}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+        return AuthResponse.fromJson(jsonResponse);
+      } else if (response.statusCode == 400) {
+        try {
+          final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+          final message = jsonResponse['message'] as String? ?? 'Error en el registro';
+          throw Exception(message);
+        } catch (e) {
+          throw Exception('Error en el registro');
+        }
+      } else {
+        throw Exception('Error al registrarse. Código: ${response.statusCode}');
+      }
+    } on http.ClientException catch (e) {
+      print('❌ Error de conexión: $e');
+      throw Exception('No se puede conectar al servidor');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error de conexión');
+    }
+  }
+
   /// Get all modules
   Future<List<Module>> getModules({String? token}) async {
     try {
@@ -91,6 +134,116 @@ class ApiService {
     } catch (e) {
       if (e is Exception) rethrow;
       throw Exception('Error al obtener estadísticas');
+    }
+  }
+
+  /// Get distribution of egresados by career
+  Future<List<dynamic>> getDistribucionCarrera(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/distribucion-carrera'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener distribución por carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener distribución');
+    }
+  }
+
+  /// Get employment rate
+  Future<Map<String, dynamic>> getTasaEmpleabilidad(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/tasa-empleabilidad'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Error al obtener tasa de empleabilidad');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener tasa de empleabilidad');
+    }
+  }
+
+  /// Get employment by career
+  Future<List<dynamic>> getEmpleabilidadCarrera(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/empleabilidad-carrera'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener empleabilidad por carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener empleabilidad');
+    }
+  }
+
+  /// Get process funnel
+  Future<List<dynamic>> getEmbudoProceso(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/embudo-proceso'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener embudo de proceso');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener embudo');
+    }
+  }
+
+  /// Get competencies radar
+  Future<List<dynamic>> getRadarCompetencias(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/radar-competencias'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener radar de competencias');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener radar');
     }
   }
 

@@ -385,6 +385,195 @@ export class AdminService {
   }
 
   /**
+   * Get distribution of egresados by career
+   */
+  async getDistribucionPorCarrera() {
+    const client = this.supabaseService.getClient();
+
+    const { data: egresados } = await client
+      .from('egresados')
+      .select('carrera_id, carreras(nombre)')
+      .is('deleted_at', null);
+
+    // Group by career
+    const grouped = (egresados || []).reduce((acc: any, e: any) => {
+      const carrera = e.carreras?.nombre || 'Sin carrera';
+      acc[carrera] = (acc[carrera] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([carrera, total]) => ({
+      carrera,
+      total,
+    }));
+  }
+
+  /**
+   * Get employment rate (empleados vs desempleados)
+   */
+  async getTasaEmpleabilidad() {
+    const client = this.supabaseService.getClient();
+
+    const { data: egresados, error } = await client
+      .from('egresados')
+      .select('estado_laboral')
+      .is('deleted_at', null)
+      .not('estado_laboral', 'is', null);
+
+    if (error) {
+      this.logger.error(`Error getting employment rate: ${error.message}`);
+      throw new Error(`Error getting employment rate: ${error.message}`);
+    }
+
+    this.logger.log(`Found ${egresados?.length || 0} egresados with estado_laboral`);
+
+    const stats = (egresados || []).reduce(
+      (acc: any, e: any) => {
+        const estado = e.estado_laboral?.toLowerCase() || '';
+        if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
+          acc.empleados++;
+        } else if (estado === 'desempleado') {
+          acc.desempleados++;
+        } else if (estado === 'estudiando') {
+          acc.estudiando++;
+        } else {
+          acc.otros++;
+        }
+        return acc;
+      },
+      { empleados: 0, desempleados: 0, estudiando: 0, otros: 0 },
+    );
+
+    const total = stats.empleados + stats.desempleados + stats.estudiando + stats.otros;
+
+    this.logger.log(`Employment stats: ${JSON.stringify(stats)}`);
+
+    return {
+      empleados: stats.empleados,
+      desempleados: stats.desempleados,
+      estudiando: stats.estudiando,
+      otros: stats.otros,
+      total,
+      porcentaje_empleados: total > 0 ? Math.round((stats.empleados / total) * 100) : 0,
+      porcentaje_desempleados: total > 0 ? Math.round((stats.desempleados / total) * 100) : 0,
+    };
+  }
+
+  /**
+   * Get employment rate by career
+   */
+  async getEmpleabilidadPorCarrera() {
+    const client = this.supabaseService.getClient();
+
+    const { data: egresados } = await client
+      .from('egresados')
+      .select('carrera_id, estado_laboral, carreras(nombre)')
+      .is('deleted_at', null);
+
+    // Group by career
+    const grouped = (egresados || []).reduce((acc: any, e: any) => {
+      const carrera = e.carreras?.nombre || 'Sin carrera';
+      if (!acc[carrera]) {
+        acc[carrera] = { empleados: 0, desempleados: 0, estudiando: 0, otros: 0, total: 0 };
+      }
+
+      const estado = e.estado_laboral?.toLowerCase() || '';
+      if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
+        acc[carrera].empleados++;
+      } else if (estado === 'desempleado') {
+        acc[carrera].desempleados++;
+      } else if (estado === 'estudiando') {
+        acc[carrera].estudiando++;
+      } else {
+        acc[carrera].otros++;
+      }
+      acc[carrera].total++;
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([carrera, stats]: [string, any]) => ({
+      carrera,
+      empleados: stats.empleados,
+      desempleados: stats.desempleados,
+      estudiando: stats.estudiando,
+      otros: stats.otros,
+      total: stats.total,
+      porcentaje_empleados: stats.total > 0 ? Math.round((stats.empleados / stats.total) * 100) : 0,
+    }));
+  }
+
+  /**
+   * Get process funnel (stages of graduation process)
+   */
+  async getEmbudoProceso() {
+    const client = this.supabaseService.getClient();
+
+    const { count: totalEgresados } = await client
+      .from('egresados')
+      .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null);
+
+    const { count: habilitados } = await client
+      .from('egresados')
+      .select('*', { count: 'exact', head: true })
+      .eq('habilitado', true)
+      .is('deleted_at', null);
+
+    const { count: documentosCompletos } = await client
+      .from('egresados')
+      .select('*', { count: 'exact', head: true })
+      .eq('proceso_grado_completo', true)
+      .is('deleted_at', null);
+
+    const { count: autoevaluacionesCompletas } = await client
+      .from('egresados')
+      .select('*', { count: 'exact', head: true })
+      .eq('autoevaluacion_completada', true)
+      .is('deleted_at', null);
+
+    return [
+      { etapa: 'Total Egresados', total: totalEgresados || 0 },
+      { etapa: 'Habilitados', total: habilitados || 0 },
+      { etapa: 'Documentos Completos', total: documentosCompletos || 0 },
+      { etapa: 'Autoevaluación Completa', total: autoevaluacionesCompletas || 0 },
+    ];
+  }
+
+  /**
+   * Get competencies radar (average scores by category)
+   */
+  async getRadarCompetencias() {
+    const client = this.supabaseService.getClient();
+
+    const { data: respuestas } = await client
+      .from('respuestas_autoevaluacion')
+      .select('respuesta_numerica, preguntas_autoevaluacion(categoria, tipo)')
+      .eq('preguntas_autoevaluacion.tipo', 'likert')
+      .not('respuesta_numerica', 'is', null);
+
+    if (!respuestas || respuestas.length === 0) {
+      return [];
+    }
+
+    // Group by category and calculate average
+    const grouped = respuestas.reduce((acc: any, r: any) => {
+      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categoría';
+      if (!acc[categoria]) {
+        acc[categoria] = { sum: 0, count: 0 };
+      }
+      acc[categoria].sum += r.respuesta_numerica;
+      acc[categoria].count++;
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([categoria, stats]: [string, any]) => ({
+      categoria,
+      promedio: stats.count > 0 ? Number((stats.sum / stats.count).toFixed(2)) : 0,
+      total_respuestas: stats.count,
+    }));
+  }
+
+  /**
    * Enable/disable a single egresado
    */
   async habilitarEgresado(egresadoId: string, habilitado: boolean) {
@@ -859,6 +1048,7 @@ export class AdminService {
 
         const publicUrl = urlData?.publicUrl || null;
         this.logger.log(`Generated URL for ${doc.nombre_archivo}: ${publicUrl}`);
+        this.logger.log(`created_at value: ${doc.created_at}, type: ${typeof doc.created_at}`);
 
         acc[carreraName].push({
           id: doc.id,

@@ -15,16 +15,21 @@ class EstadisticasScreen extends StatefulWidget {
 class _EstadisticasScreenState extends State<EstadisticasScreen> {
   final ApiService _apiService = ApiService();
   DashboardStats? _stats;
+  List<dynamic>? _distribucionCarrera;
+  Map<String, dynamic>? _tasaEmpleabilidad;
+  List<dynamic>? _empleabilidadCarrera;
+  List<dynamic>? _embudoProceso;
+  List<dynamic>? _radarCompetencias;
   bool _isLoading = true;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    _loadAllData();
   }
 
-  Future<void> _loadStats() async {
+  Future<void> _loadAllData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -38,11 +43,24 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
         throw Exception('No hay token de autenticación');
       }
 
-      final stats = await _apiService.getDashboardStats(token);
+      // Load all analytics data in parallel
+      final results = await Future.wait([
+        _apiService.getDashboardStats(token),
+        _apiService.getDistribucionCarrera(token),
+        _apiService.getTasaEmpleabilidad(token),
+        _apiService.getEmpleabilidadCarrera(token),
+        _apiService.getEmbudoProceso(token),
+        _apiService.getRadarCompetencias(token),
+      ]);
 
       if (mounted) {
         setState(() {
-          _stats = stats;
+          _stats = results[0] as DashboardStats;
+          _distribucionCarrera = results[1] as List<dynamic>;
+          _tasaEmpleabilidad = results[2] as Map<String, dynamic>;
+          _empleabilidadCarrera = results[3] as List<dynamic>;
+          _embudoProceso = results[4] as List<dynamic>;
+          _radarCompetencias = results[5] as List<dynamic>;
           _isLoading = false;
         });
       }
@@ -67,7 +85,7 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadStats,
+            onPressed: _loadAllData,
           ),
         ],
       ),
@@ -91,7 +109,7 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
           Text(_errorMessage!, textAlign: TextAlign.center),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: _loadStats,
+            onPressed: _loadAllData,
             icon: const Icon(Icons.refresh),
             label: const Text('Reintentar'),
           ),
@@ -101,179 +119,106 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
   }
 
   Widget _buildStatsContent() {
-    if (_stats == null || _stats!.porCarrera.isEmpty) {
-      return const Center(child: Text('No hay datos disponibles'));
-    }
-
-    // Calculate global employment stats
-    int totalEmpleados = 0;
-    int totalDesempleados = 0;
-    int totalEgresados = 0;
-
-    for (var carrera in _stats!.porCarrera) {
-      totalEmpleados += carrera.empleados;
-      totalDesempleados += carrera.desempleados;
-      totalEgresados += carrera.total;
-    }
-
-    int totalOtros = totalEgresados - totalEmpleados - totalDesempleados;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Global Charts Section
-          Text(
-            'Resumen Global',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          // Row 1: Distribution + Employment Rate
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildDistribucionCarrera()),
+              const SizedBox(width: 16),
+              Expanded(child: _buildTasaEmpleabilidad()),
+            ],
           ),
           const SizedBox(height: 16),
-          _buildGlobalPieChart(
-            'Estado Laboral',
-            [
-              PieChartSectionData(
-                value: totalEmpleados.toDouble(),
-                title: '${_calculatePercentage(totalEmpleados, totalEgresados)}%',
-                color: Colors.green,
-                radius: 50,
-                titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              PieChartSectionData(
-                value: totalDesempleados.toDouble(),
-                title: '${_calculatePercentage(totalDesempleados, totalEgresados)}%',
-                color: Colors.red,
-                radius: 50,
-                titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              if (totalOtros > 0)
-                PieChartSectionData(
-                  value: totalOtros.toDouble(),
-                  title: '${_calculatePercentage(totalOtros, totalEgresados)}%',
-                  color: Colors.grey,
-                  radius: 50,
-                  titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-            ],
-            [
-              _buildLegendItem('Empleados', Colors.green, totalEmpleados),
-              _buildLegendItem('Desempleados', Colors.red, totalDesempleados),
-              if (totalOtros > 0) _buildLegendItem('Sin Info / Otros', Colors.grey, totalOtros),
-            ],
-          ),
-          const SizedBox(height: 24),
           
-          // Per Career Section
-          Text(
-            'Detalle por Carrera',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          // Row 2: Employment by Career
+          _buildEmpleabilidadCarrera(),
           const SizedBox(height: 16),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _stats!.porCarrera.length,
-            itemBuilder: (context, index) {
-              final carrera = _stats!.porCarrera[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ExpansionTile(
-                  leading: const Icon(Icons.school, color: Colors.blue),
-                  title: Text(carrera.carrera, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${carrera.total} egresados'),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 150,
-                              child: PieChart(
-                                PieChartData(
-                                  sectionsSpace: 0,
-                                  centerSpaceRadius: 30,
-                                  sections: [
-                                    PieChartSectionData(
-                                      value: carrera.empleados.toDouble(),
-                                      title: '',
-                                      color: Colors.green,
-                                      radius: 40,
-                                    ),
-                                    PieChartSectionData(
-                                      value: carrera.desempleados.toDouble(),
-                                      title: '',
-                                      color: Colors.red,
-                                      radius: 40,
-                                    ),
-                                    PieChartSectionData(
-                                      value: (carrera.total - carrera.empleados - carrera.desempleados).toDouble(),
-                                      title: '',
-                                      color: Colors.grey.shade300,
-                                      radius: 40,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildLegendItem('Empleados', Colors.green, carrera.empleados),
-                                _buildLegendItem('Desempleados', Colors.red, carrera.desempleados),
-                                _buildLegendItem('Otros', Colors.grey.shade300, carrera.total - carrera.empleados - carrera.desempleados),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+          
+          // Row 3: Process Funnel + Competencies Radar
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildEmbudoProceso()),
+              const SizedBox(width: 16),
+              Expanded(child: _buildRadarCompetencias()),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGlobalPieChart(String title, List<PieChartSectionData> sections, List<Widget> legendItems) {
+  // Chart 1: Distribution by Career (Bar Chart)
+  Widget _buildDistribucionCarrera() {
+    if (_distribucionCarrera == null || _distribucionCarrera!.isEmpty) {
+      return _buildEmptyCard('Distribución por Carrera', 'No hay datos disponibles');
+    }
+
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: SizedBox(
-                    height: 200,
-                    child: PieChart(
-                      PieChartData(
-                        sectionsSpace: 2,
-                        centerSpaceRadius: 40,
-                        sections: sections,
+            Text(
+              'Distribución por Carrera',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: _distribucionCarrera!.map((e) => (e['total'] as num).toDouble()).reduce((a, b) => a > b ? a : b) * 1.2,
+                  barTouchData: BarTouchData(enabled: true),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          if (value.toInt() >= 0 && value.toInt() < _distribucionCarrera!.length) {
+                            final carrera = _distribucionCarrera![value.toInt()]['carrera'] as String;
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                carrera.length > 15 ? '${carrera.substring(0, 12)}...' : carrera,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            );
+                          }
+                          return const Text('');
+                        },
                       ),
                     ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                    ),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
+                  borderData: FlBorderData(show: false),
+                  barGroups: _distribucionCarrera!.asMap().entries.map((entry) {
+                    return BarChartGroupData(
+                      x: entry.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: (entry.value['total'] as num).toDouble(),
+                          color: Colors.blue,
+                          width: 20,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
                 ),
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: legendItems,
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -281,31 +226,305 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
     );
   }
 
-  Widget _buildLegendItem(String label, Color color, int value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '$label ($value)',
-              style: const TextStyle(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
+  // Chart 2: Employment Rate (Donut Chart)
+  Widget _buildTasaEmpleabilidad() {
+    if (_tasaEmpleabilidad == null) {
+      return _buildEmptyCard('Tasa de Empleabilidad', 'No hay datos disponibles');
+    }
+
+    final empleados = (_tasaEmpleabilidad!['empleados'] as num?)?.toDouble() ?? 0;
+    final desempleados = (_tasaEmpleabilidad!['desempleados'] as num?)?.toDouble() ?? 0;
+    final estudiando = (_tasaEmpleabilidad!['estudiando'] as num?)?.toDouble() ?? 0;
+    final otros = (_tasaEmpleabilidad!['otros'] as num?)?.toDouble() ?? 0;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tasa de Empleabilidad',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: PieChart(
+                PieChartData(
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 60,
+                  sections: [
+                    if (empleados > 0)
+                      PieChartSectionData(
+                        value: empleados,
+                        title: '${empleados.toInt()}\nEmpleados',
+                        color: Colors.green,
+                        radius: 80,
+                        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    if (desempleados > 0)
+                      PieChartSectionData(
+                        value: desempleados,
+                        title: '${desempleados.toInt()}\nDesempleados',
+                        color: Colors.red,
+                        radius: 80,
+                        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    if (estudiando > 0)
+                      PieChartSectionData(
+                        value: estudiando,
+                        title: '${estudiando.toInt()}\nEstudiando',
+                        color: Colors.blue,
+                        radius: 80,
+                        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    if (otros > 0)
+                      PieChartSectionData(
+                        value: otros,
+                        title: '${otros.toInt()}\nOtros',
+                        color: Colors.grey,
+                        radius: 80,
+                        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  String _calculatePercentage(int value, int total) {
-    if (total == 0) return '0';
-    return (value / total * 100).toStringAsFixed(1);
+  // Chart 3: Employment by Career (Grouped Bar Chart)
+  Widget _buildEmpleabilidadCarrera() {
+    if (_empleabilidadCarrera == null || _empleabilidadCarrera!.isEmpty) {
+      return _buildEmptyCard('Empleabilidad por Carrera', 'No hay datos disponibles');
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Empleabilidad por Carrera',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ..._empleabilidadCarrera!.map((item) {
+              final carrera = item['carrera'] as String;
+              final empleados = (item['empleados'] as num?)?.toInt() ?? 0;
+              final desempleados = (item['desempleados'] as num?)?.toInt() ?? 0;
+              final total = (item['total'] as num?)?.toInt() ?? 1;
+              final porcentaje = (item['porcentaje_empleados'] as num?)?.toInt() ?? 0;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            carrera,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        Text(
+                          '$porcentaje% empleados',
+                          style: TextStyle(
+                            color: porcentaje >= 70 ? Colors.green : porcentaje >= 50 ? Colors.orange : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: empleados,
+                          child: Container(
+                            height: 20,
+                            color: Colors.green,
+                            alignment: Alignment.center,
+                            child: Text(
+                              empleados > 0 ? '$empleados' : '',
+                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                            ),
+                          ),
+                        ),
+                        if (desempleados > 0)
+                          Expanded(
+                            flex: desempleados,
+                            child: Container(
+                              height: 20,
+                              color: Colors.red,
+                              alignment: Alignment.center,
+                              child: Text(
+                                '$desempleados',
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Chart 4: Process Funnel
+  Widget _buildEmbudoProceso() {
+    if (_embudoProceso == null || _embudoProceso!.isEmpty) {
+      return _buildEmptyCard('Embudo de Proceso', 'No hay datos disponibles');
+    }
+
+    final maxValue = _embudoProceso!.map((e) => (e['total'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Embudo de Proceso',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ..._embudoProceso!.map((stage) {
+              final etapa = stage['etapa'] as String;
+              final total = (stage['total'] as num).toInt();
+              final percentage = maxValue > 0 ? (total / maxValue).toDouble() : 0.0;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(etapa, style: const TextStyle(fontWeight: FontWeight.w500)),
+                        Text('$total', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      minHeight: 20,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.blue.withOpacity(0.7 + (percentage * 0.3)),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Chart 5: Competencies Radar
+  Widget _buildRadarCompetencias() {
+    if (_radarCompetencias == null || _radarCompetencias!.isEmpty) {
+      return _buildEmptyCard('Radar de Competencias', 'No hay datos de autoevaluación');
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Radar de Competencias',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Promedio de calificaciones (1-5)',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: RadarChart(
+                RadarChartData(
+                  radarShape: RadarShape.polygon,
+                  tickCount: 5,
+                  ticksTextStyle: const TextStyle(fontSize: 10, color: Colors.transparent),
+                  radarBorderData: const BorderSide(color: Colors.grey, width: 1),
+                  gridBorderData: const BorderSide(color: Colors.grey, width: 0.5),
+                  tickBorderData: const BorderSide(color: Colors.transparent),
+                  getTitle: (index, angle) {
+                    if (index < _radarCompetencias!.length) {
+                      final categoria = _radarCompetencias![index]['categoria'] as String;
+                      return RadarChartTitle(
+                        text: categoria.length > 15 ? '${categoria.substring(0, 12)}...' : categoria,
+                        angle: angle,
+                      );
+                    }
+                    return const RadarChartTitle(text: '');
+                  },
+                  dataSets: [
+                    RadarDataSet(
+                      fillColor: Colors.blue.withOpacity(0.2),
+                      borderColor: Colors.blue,
+                      borderWidth: 2,
+                      dataEntries: _radarCompetencias!.map((item) {
+                        final promedio = (item['promedio'] as num).toDouble();
+                        return RadarEntry(value: promedio);
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyCard(String title, String message) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  Text(message, style: TextStyle(color: Colors.grey.shade600)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
