@@ -29,7 +29,7 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .select('*')
-      .eq('correo', email)
+      .eq('correo_institucional', email)
       .single();
 
     if (error || !admin) {
@@ -52,7 +52,7 @@ export class AuthService {
     // 3. Generate JWT
     const payload: ITokenPayload = {
       sub: admin.id,
-      email: admin.correo,
+      email: admin.correo_institucional,
       role: admin.rol,
     };
 
@@ -64,7 +64,7 @@ export class AuthService {
       accessToken,
       user: {
         id: admin.id,
-        email: admin.correo,
+        email: admin.correo_institucional,
         role: admin.rol,
         nombre: admin.nombre,
         apellido: admin.apellido,
@@ -78,7 +78,7 @@ export class AuthService {
    * @returns AuthResponseDto with JWT token
    */
   async register(registerDto: any): Promise<AuthResponseDto> {
-    const { correo, nombre, apellido, password, confirmPassword } = registerDto;
+    const { correo_institucional, nombre, apellido, password, confirmPassword } = registerDto;
 
     // 1. Validate passwords match
     if (password !== confirmPassword) {
@@ -90,11 +90,11 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .select('id')
-      .eq('correo', correo)
+      .eq('correo_institucional', correo_institucional)
       .single();
 
     if (existingAdmin) {
-      throw new BadRequestException('El correo electrónico ya está registrado');
+      throw new BadRequestException('El correo_institucional electrónico ya está registrado');
     }
 
     // 3. Hash password
@@ -106,7 +106,7 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .insert({
-        correo,
+        correo_institucional,
         nombre,
         apellido,
         password_hash: passwordHash,
@@ -124,19 +124,19 @@ export class AuthService {
     // 5. Generate JWT
     const payload: ITokenPayload = {
       sub: newAdmin.id,
-      email: newAdmin.correo,
+      email: newAdmin.correo_institucional,
       role: newAdmin.rol,
     };
 
     const accessToken = this.jwtService.sign(payload);
 
-    this.logger.log(`New admin registered: ${correo}`);
+    this.logger.log(`New admin registered: ${correo_institucional}`);
 
     return {
       accessToken,
       user: {
         id: newAdmin.id,
-        email: newAdmin.correo,
+        email: newAdmin.correo_institucional,
         role: newAdmin.rol,
         nombre: newAdmin.nombre,
         apellido: newAdmin.apellido,
@@ -167,3 +167,4 @@ export class AuthService {
     this.logger.log(`Magic link sent to: ${email}`);
   }
 }
+

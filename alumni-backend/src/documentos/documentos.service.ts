@@ -145,16 +145,16 @@ export class DocumentosService {
           const { data: egresadoData } = await this.supabaseService
             .getClient()
             .from('egresados')
-            .select('correo, nombre, apellido')
+            .select('correo_institucional, nombre, apellido')
             .eq('id', egresadoId)
             .single();
 
           if (egresadoData) {
             await this.mailService.sendPdfGenerado(
-              egresadoData.correo,
+              egresadoData.correo_institucional,
               `${egresadoData.nombre} ${egresadoData.apellido}`,
             );
-            this.logger.log(`PDF email sent to ${egresadoData.correo}`);
+            this.logger.log(`PDF email sent to ${egresadoData.correo_institucional}`);
           }
         } catch (error) {
           this.logger.error(`Failed to send PDF email: ${error.message}`);
@@ -202,7 +202,7 @@ export class DocumentosService {
         .select(`
           nombre, 
           apellido, 
-          correo,
+          correo_institucional,
           carrera:carreras(nombre)
         `)
         .eq('id', egresadoId)
@@ -326,7 +326,7 @@ export class DocumentosService {
       font: fontRegular,
     });
 
-    page.drawText(`Correo: ${egresado?.correo || ''}`, {
+    page.drawText(`correo_institucional: ${egresado?.correo_institucional || ''}`, {
       x: 50,
       y: height - 180,
       size: 14,
@@ -626,3 +626,4 @@ export class DocumentosService {
     }
   }
 }
+

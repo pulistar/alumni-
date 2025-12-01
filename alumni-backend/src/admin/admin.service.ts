@@ -1,4 +1,4 @@
-ï»¿import {
+import {
   Injectable,
   Logger,
   NotFoundException,
@@ -42,10 +42,10 @@ export class AdminService {
         id,
         nombre,
         apellido,
-        correo,
+        correo_institucional,
         id_universitario,
-        telefono,
-        estado_laboral,
+        celular,
+        estado_laboral_id,
         habilitado,
         proceso_grado_completo,
         autoevaluacion_habilitada,
@@ -53,6 +53,9 @@ export class AdminService {
         created_at,
         carrera_id,
         carreras (
+          nombre
+        ),
+        estados_laborales (
           nombre
         )
       `,
@@ -78,7 +81,7 @@ export class AdminService {
     if (search) {
       const s = search.replace(/%/g, '\\%'); // escape percent if needed
       query = query.or(
-        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo.ilike.%${s}%,id_universitario.ilike.%${s}%)`,
+        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo_institucional.ilike.%${s}%,id_universitario.ilike.%${s}%)`,
       );
     }
 
@@ -314,7 +317,7 @@ export class AdminService {
 
     const { data: egresadosAll } = await client
       .from('egresados')
-      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral')
+      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral_id, estados_laborales(nombre)')
       .is('deleted_at', null);
 
     const resumenPorCarreraMap = new Map<
@@ -345,7 +348,7 @@ export class AdminService {
       if (e.autoevaluacion_completada) curr.autoevaluaciones_completas++;
 
       // Employment stats
-      const estado = e.estado_laboral?.toLowerCase() || '';
+      const estado = (e.estados_laborales as any)?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         curr.empleados++;
       } else if (estado === 'desempleado') {
@@ -416,9 +419,9 @@ export class AdminService {
 
     const { data: egresados, error } = await client
       .from('egresados')
-      .select('estado_laboral')
+      .select('estado_laboral_id, estados_laborales(nombre)')
       .is('deleted_at', null)
-      .not('estado_laboral', 'is', null);
+      .not('estado_laboral_id', 'is', null);
 
     if (error) {
       this.logger.error(`Error getting employment rate: ${error.message}`);
@@ -429,7 +432,7 @@ export class AdminService {
 
     const stats = (egresados || []).reduce(
       (acc: any, e: any) => {
-        const estado = e.estado_laboral?.toLowerCase() || '';
+        const estado = (e.estados_laborales as any)?.nombre?.toLowerCase() || '';
         if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
           acc.empleados++;
         } else if (estado === 'desempleado') {
@@ -467,7 +470,7 @@ export class AdminService {
 
     const { data: egresados } = await client
       .from('egresados')
-      .select('carrera_id, estado_laboral, carreras(nombre)')
+      .select('carrera_id, estado_laboral_id, carreras(nombre), estados_laborales(nombre)')
       .is('deleted_at', null);
 
     // Group by career
@@ -477,7 +480,7 @@ export class AdminService {
         acc[carrera] = { empleados: 0, desempleados: 0, estudiando: 0, otros: 0, total: 0 };
       }
 
-      const estado = e.estado_laboral?.toLowerCase() || '';
+      const estado = (e.estados_laborales as any)?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         acc[carrera].empleados++;
       } else if (estado === 'desempleado') {
@@ -535,7 +538,7 @@ export class AdminService {
       { etapa: 'Total Egresados', total: totalEgresados || 0 },
       { etapa: 'Habilitados', total: habilitados || 0 },
       { etapa: 'Documentos Completos', total: documentosCompletos || 0 },
-      { etapa: 'AutoevaluaciÃ³n Completa', total: autoevaluacionesCompletas || 0 },
+      { etapa: 'Autoevaluación Completa', total: autoevaluacionesCompletas || 0 },
     ];
   }
 
@@ -557,7 +560,7 @@ export class AdminService {
 
     // Group by category and calculate average
     const grouped = respuestas.reduce((acc: any, r: any) => {
-      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categorÃ­a';
+      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categoría';
       if (!acc[categoria]) {
         acc[categoria] = { sum: 0, count: 0 };
       }
@@ -599,7 +602,7 @@ export class AdminService {
     if (habilitado) {
       await this.notificacionesService.crear({
         egresado_id: egresadoId,
-        titulo: 'Â¡Tu cuenta ha sido habilitada!',
+        titulo: '¡Tu cuenta ha sido habilitada!',
         mensaje: 'Ya puedes subir tus documentos de grado y comenzar tu proceso.',
         tipo: 'habilitacion',
         url_accion: '/documentos',
@@ -607,8 +610,8 @@ export class AdminService {
 
       // Send email notification (best-effort)
       try {
-        await this.mailService.sendCuentaHabilitada(data.correo, data.nombre, data.apellido);
-        this.logger.log(`Email sent to ${data.correo}`);
+        await this.mailService.sendCuentaHabilitada(data.correo_institucional, data.nombre, data.apellido);
+        this.logger.log(`Email sent to ${data.correo_institucional}`);
       } catch (err) {
         this.logger.error(`Failed to send email: ${err.message}`);
         // Don't throw - email is not critical
@@ -623,7 +626,7 @@ export class AdminService {
    */
   async habilitarDesdeExcel(file: Express.Multer.File, adminId: string) {
     if (!file) {
-      throw new BadRequestException('No se proporcionÃ³ ningÃºn archivo');
+      throw new BadRequestException('No se proporcionó ningún archivo');
     }
 
     try {
@@ -634,7 +637,7 @@ export class AdminService {
       const rawData: any[] = XLSX.utils.sheet_to_json(sheet);
 
       if (rawData.length === 0) {
-        throw new BadRequestException('El archivo Excel estÃ¡ vacÃ­o');
+        throw new BadRequestException('El archivo Excel está vacío');
       }
 
       // Normalize headers (lowercase, trim)
@@ -664,17 +667,17 @@ export class AdminService {
         const rowNumber = i + 2; // Excel rows start at 1, header is row 1
 
         try {
-          // Accept different header names: correo, email
-          const correo = row['correo'] || row['email'] || row['e-mail'];
+          // Accept different header names: correo_institucional, email
+          const correo_institucional = row['correo_institucional'] || row['email'] || row['e-mail'];
           const nombre = row['nombre'] || row['first_name'];
           const apellido = row['apellido'] || row['last_name'];
 
           // Validate required fields
-          if (!correo || !nombre || !apellido) {
+          if (!correo_institucional || !nombre || !apellido) {
             resultados.errores.push({
               fila: rowNumber,
-              correo: correo || 'N/A',
-              error: 'Faltan campos requeridos (correo, nombre, apellido)',
+              correo_institucional: correo_institucional || 'N/A',
+              error: 'Faltan campos requeridos (correo_institucional, nombre, apellido)',
             });
             continue;
           }
@@ -686,7 +689,7 @@ export class AdminService {
             if (!carreraId) {
               resultados.errores.push({
                 fila: rowNumber,
-                correo,
+                correo_institucional,
                 error: `Carrera "${row['carrera']}" no encontrada`,
               });
               continue;
@@ -697,14 +700,14 @@ export class AdminService {
           const { data: existente, error: existeError } = await this.supabaseService
             .getClient()
             .from('egresados')
-            .select('id, uid, correo, nombre, apellido')
-            .eq('correo', correo)
+            .select('id, uid, correo_institucional, nombre, apellido')
+            .eq('correo_institucional', correo_institucional)
             .maybeSingle();
 
           if (existeError) {
             resultados.errores.push({
               fila: rowNumber,
-              correo,
+              correo_institucional,
               error: existeError.message,
             });
             continue;
@@ -724,7 +727,7 @@ export class AdminService {
             if (updError) {
               resultados.errores.push({
                 fila: rowNumber,
-                correo,
+                correo_institucional,
                 error: updError.message,
               });
               continue;
@@ -733,7 +736,7 @@ export class AdminService {
             // Create notification
             await this.notificacionesService.crear({
               egresado_id: existente.id,
-              titulo: 'Â¡Tu cuenta ha sido habilitada!',
+              titulo: '¡Tu cuenta ha sido habilitada!',
               mensaje: 'Ya puedes subir tus documentos de grado.',
               tipo: 'habilitacion',
               url_accion: '/documentos',
@@ -743,14 +746,14 @@ export class AdminService {
           } else {
             resultados.errores.push({
               fila: rowNumber,
-              correo,
+              correo_institucional,
               error: 'Egresado no existe en el sistema. Debe registrarse primero.',
             });
           }
         } catch (err) {
           resultados.errores.push({
             fila: rowNumber,
-            correo: row['correo'] || 'N/A',
+            correo_institucional: row['correo_institucional'] || 'N/A',
             error: err.message,
           });
         }
@@ -807,16 +810,20 @@ export class AdminService {
                 id,
                 nombre,
                 apellido,
-                correo,
+                correo_institucional,
                 id_universitario,
-                telefono,
+                celular,
                 habilitado,
                 proceso_grado_completo,
                 autoevaluacion_habilitada,
                 autoevaluacion_completada,
-                estado_laboral,
+                estado_laboral_id,
                 created_at,
                 carreras (
+                    id,
+                    nombre
+                ),
+                estados_laborales (
                     id,
                     nombre
                 )
@@ -829,7 +836,7 @@ export class AdminService {
     if (q) {
       const s = q.replace(/%/g, '\\%');
       supabaseQuery = supabaseQuery.or(
-        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo.ilike.%${s}%)`,
+        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo_institucional.ilike.%${s}%)`,
       );
     }
 
@@ -839,7 +846,7 @@ export class AdminService {
     }
 
     if (estado_laboral) {
-      supabaseQuery = supabaseQuery.eq('estado_laboral', estado_laboral);
+      supabaseQuery = supabaseQuery.eq('estado_laboral_id', estado_laboral);
     }
 
     if (habilitado !== undefined) {
@@ -856,7 +863,7 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error in search: ${error.message}`);
-      throw new InternalServerErrorException('Error en la bÃºsqueda');
+      throw new InternalServerErrorException('Error en la búsqueda');
     }
 
     return {
@@ -886,12 +893,12 @@ export class AdminService {
       { header: 'ID Universitario', key: 'id_universitario', width: 15 },
       { header: 'Nombre', key: 'nombre', width: 20 },
       { header: 'Apellido', key: 'apellido', width: 20 },
-      { header: 'Correo', key: 'correo', width: 35 },
+      { header: 'correo_institucional', key: 'correo_institucional', width: 35 },
       { header: 'Carrera', key: 'carrera', width: 35 },
-      { header: 'TelÃ©fono', key: 'telefono', width: 15 },
+      { header: 'Teléfono', key: 'celular', width: 15 },
       { header: 'Estado Laboral', key: 'estado_laboral', width: 20 },
       { header: 'Habilitado', key: 'habilitado', width: 12 },
-      { header: 'AutoevaluaciÃ³n', key: 'autoevaluacion', width: 15 },
+      { header: 'Autoevaluación', key: 'autoevaluacion', width: 15 },
       { header: 'Fecha Registro', key: 'created_at', width: 20 },
     ];
 
@@ -901,11 +908,11 @@ export class AdminService {
         id_universitario: egresado.id_universitario || 'N/A',
         nombre: egresado.nombre,
         apellido: egresado.apellido,
-        correo: egresado.correo,
+        correo_institucional: egresado.correo_institucional,
         carrera: (egresado.carreras as any)?.nombre || 'N/A',
-        telefono: egresado.telefono || 'N/A',
-        estado_laboral: egresado.estado_laboral || 'N/A',
-        habilitado: egresado.habilitado ? 'SÃ­' : 'No',
+        celular: egresado.celular || 'N/A',
+        estado_laboral: (egresado.estados_laborales as any)?.nombre || 'N/A',
+        habilitado: egresado.habilitado ? 'Sí' : 'No',
         autoevaluacion: egresado.autoevaluacion_completada ? 'Completada' : 'Pendiente',
         created_at: egresado.created_at
           ? new Date(egresado.created_at).toLocaleDateString('es-CO')
@@ -938,7 +945,7 @@ export class AdminService {
       .select(
         `
                 *,
-                egresado:egresados(nombre, apellido, correo, id_universitario),
+                egresado:egresados(nombre, apellido, correo_institucional, id_universitario),
                 pregunta:preguntas_autoevaluacion(texto, categoria, tipo)
             `,
       )
@@ -956,7 +963,7 @@ export class AdminService {
     worksheet.columns = [
       { header: 'ID Universitario', key: 'id_universitario', width: 15 },
       { header: 'Egresado', key: 'egresado', width: 35 },
-      { header: 'Correo', key: 'correo', width: 35 },
+      { header: 'correo_institucional', key: 'correo_institucional', width: 35 },
       { header: 'Competencia', key: 'competencia', width: 30 },
       { header: 'Pregunta', key: 'pregunta', width: 60 },
       { header: 'Respuesta', key: 'respuesta', width: 15 },
@@ -968,7 +975,7 @@ export class AdminService {
       worksheet.addRow({
         id_universitario: resp.egresado?.id_universitario || 'N/A',
         egresado: `${resp.egresado?.nombre || ''} ${resp.egresado?.apellido || ''}`.trim(),
-        correo: resp.egresado?.correo || 'N/A',
+        correo_institucional: resp.egresado?.correo_institucional || 'N/A',
         competencia: resp.pregunta?.categoria || 'N/A',
         pregunta: resp.pregunta?.texto || 'N/A',
         respuesta: resp.respuesta_numerica ?? resp.respuesta_texto ?? 'N/A',
@@ -1010,7 +1017,7 @@ export class AdminService {
             id,
             nombre,
             apellido,
-            correo,
+            correo_institucional,
             carrera_id,
             carreras (nombre)
           )
@@ -1054,7 +1061,7 @@ export class AdminService {
           id: doc.id,
           egresado_id: doc.egresado_id,
           egresado_nombre: `${doc.egresados?.nombre || ''} ${doc.egresados?.apellido || ''}`.trim(),
-          egresado_correo: doc.egresados?.correo,
+          egresado_correo: doc.egresados?.correo_institucional,
           tipo_documento: doc.tipo_documento,
           nombre_archivo: doc.nombre_archivo,
           url_publica: publicUrl,
@@ -1153,7 +1160,7 @@ export class AdminService {
       .order('orden', { ascending: true });
 
     // NOTA: La columna modulo_id no existe en el schema actual de preguntas_autoevaluacion
-    // Si necesitas filtrar por mÃ³dulo, debes agregar esta columna a la tabla primero
+    // Si necesitas filtrar por módulo, debes agregar esta columna a la tabla primero
     // if (moduloId) {
     //     query = query.eq('modulo_id', moduloId);
     // }
@@ -1243,7 +1250,7 @@ export class AdminService {
     return data;
   }
 
-  // ==================== CRUD DE MÃ“DULOS ====================
+  // ==================== CRUD DE MÓDULOS ====================
 
   async getModulos(activo?: boolean) {
     let query = this.supabaseService
@@ -1260,7 +1267,7 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error fetching modules: ${error.message}`);
-      throw new InternalServerErrorException('Error al obtener mÃ³dulos');
+      throw new InternalServerErrorException('Error al obtener módulos');
     }
 
     return data;
@@ -1275,7 +1282,7 @@ export class AdminService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('MÃ³dulo no encontrado');
+      throw new NotFoundException('Módulo no encontrado');
     }
 
     return data;
@@ -1294,10 +1301,10 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error creating module: ${error.message}`);
-      throw new InternalServerErrorException('Error al crear mÃ³dulo');
+      throw new InternalServerErrorException('Error al crear módulo');
     }
 
-    this.logger.log(`MÃ³dulo creado: ${data.id}`);
+    this.logger.log(`Módulo creado: ${data.id}`);
     return data;
   }
 
@@ -1311,10 +1318,10 @@ export class AdminService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('MÃ³dulo no encontrado');
+      throw new NotFoundException('Módulo no encontrado');
     }
 
-    this.logger.log(`MÃ³dulo actualizado: ${id}`);
+    this.logger.log(`Módulo actualizado: ${id}`);
     return data;
   }
 
@@ -1330,10 +1337,11 @@ export class AdminService {
       .single();
 
     if (error) {
-      throw new InternalServerErrorException('Error al actualizar mÃ³dulo');
+      throw new InternalServerErrorException('Error al actualizar módulo');
     }
 
-    this.logger.log(`MÃ³dulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
+    this.logger.log(`Módulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
     return data;
   }
 }
+

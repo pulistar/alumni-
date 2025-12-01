@@ -37,12 +37,12 @@ export class EgresadosService {
       .getClient()
       .from('egresados')
       .select('id')
-      .eq('correo', email)
+      .eq('correo_institucional', email)
       .is('deleted_at', null)
       .single();
 
     if (existingEmail) {
-      throw new BadRequestException('El correo ya está registrado en otro perfil');
+      throw new BadRequestException('El correo_institucional ya está registrado en otro perfil');
     }
 
     // 3. Create profile
@@ -51,7 +51,7 @@ export class EgresadosService {
       .from('egresados')
       .insert({
         uid,
-        correo: email,
+        correo_institucional: email,
         ...dto,
         // habilitado defaults to false in DB
         // Admin will enable via Excel upload or manual toggle
@@ -62,7 +62,7 @@ export class EgresadosService {
     if (error) {
       this.logger.error(`Error creating profile for ${email}: ${error.message}`);
       if (error.code === '23505') {
-        throw new BadRequestException('El correo ya está registrado en otro perfil');
+        throw new BadRequestException('El correo_institucional ya está registrado en otro perfil');
       }
       throw new InternalServerErrorException('Error al crear el perfil');
     }
@@ -174,3 +174,4 @@ export class EgresadosService {
     return data;
   }
 }
+
