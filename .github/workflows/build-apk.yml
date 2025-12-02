@@ -28,6 +28,41 @@ jobs:
           flutter-version: '3.27.1'
           channel: 'stable'
       
+      - name: Create google-services.json
+        working-directory: ./egresados_app/android/app
+        run: |
+          cat > google-services.json << 'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789",
+              "project_id": "alumni-ucc-dummy",
+              "storage_bucket": "alumni-ucc-dummy.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789:android:abcdef123456",
+                  "android_client_info": {
+                    "package_name": "com.ucc.egresados_app"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForBuildOnly"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+      
       - name: Get dependencies
         working-directory: ./egresados_app
         run: flutter pub get
