@@ -29,15 +29,32 @@ abstract class AppEnvironment {
 // Entorno de desarrollo
 class DevelopmentEnvironment implements AppEnvironment {
   @override
-  String get supabaseUrl => 'https://cqumdqgrcbrqlrmsfswg.supabase.co';
+  String get supabaseUrl {
+    const envUrl = String.fromEnvironment('SUPABASE_URL');
+    if (envUrl.isEmpty) {
+      throw Exception('⚠️ SUPABASE_URL no encontrada. Configura --dart-define o launch.json');
+    }
+    return envUrl;
+  }
   
   @override
-  String get supabaseAnonKey => 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxdW1kcWdyY2JycWxybXNmc3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MzQ4MDksImV4cCI6MjA3OTUxMDgwOX0.x4Nl5UyU135Ez8o5JGOCHl_je0PApwcLC82apwJP40A';
+  String get supabaseAnonKey {
+    const envKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+    if (envKey.isEmpty) {
+      throw Exception('⚠️ SUPABASE_ANON_KEY no encontrada. Configura --dart-define o launch.json');
+    }
+    return envKey;
+  }
   
   @override
   String get apiBaseUrl {
-    // Configurado para ngrok (desarrollo)
-    return 'https://aditya-pedimented-adela.ngrok-free.dev/api'; // ✅ URL de ngrok
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isEmpty) {
+       // Valor por defecto SOLO para la URL local de desarrollo (ngrok cambia mucho)
+       // Esto es menos crítico que las keys de Supabase, pero idealmente también debería ir por env
+       return 'https://aditya-pedimented-adela.ngrok-free.dev/api';
+    }
+    return envUrl;
   }
   
   @override
@@ -50,13 +67,31 @@ class DevelopmentEnvironment implements AppEnvironment {
 // Entorno de producción
 class ProductionEnvironment implements AppEnvironment {
   @override
-  String get supabaseUrl => 'https://cqumdqgrcbrqlrmsfswg.supabase.co';
+  String get supabaseUrl {
+    const envUrl = String.fromEnvironment('SUPABASE_URL');
+    if (envUrl.isEmpty) {
+      throw Exception('CRÍTICO: SUPABASE_URL no configurada para producción.');
+    }
+    return envUrl;
+  }
   
   @override
-  String get supabaseAnonKey => 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxdW1kcWdyY2JycWxybXNmc3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MzQ4MDksImV4cCI6MjA3OTUxMDgwOX0.x4Nl5UyU135Ez8o5JGOCHl_je0PApwcLC82apwJP40A';
+  String get supabaseAnonKey {
+    const envKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+    if (envKey.isEmpty) {
+      throw Exception('CRÍTICO: SUPABASE_ANON_KEY no configurada para producción.');
+    }
+    return envKey;
+  }
   
   @override
-  String get apiBaseUrl => 'https://tu-api-produccion.com/api'; // TODO: Cambiar por tu URL de producción
+  String get apiBaseUrl {
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isEmpty) {
+      throw Exception('CRÍTICO: API_BASE_URL no configurada para producción.');
+    }
+    return envUrl;
+  }
   
   @override
   bool get isProduction => true;
@@ -68,13 +103,13 @@ class ProductionEnvironment implements AppEnvironment {
 // Entorno de testing
 class TestingEnvironment implements AppEnvironment {
   @override
-  String get supabaseUrl => 'https://tu-proyecto-test.supabase.co';
+  String get supabaseUrl => const String.fromEnvironment('SUPABASE_URL_TEST', defaultValue: '');
   
   @override
-  String get supabaseAnonKey => 'tu-anon-key-testing';
+  String get supabaseAnonKey => const String.fromEnvironment('SUPABASE_ANON_KEY_TEST', defaultValue: '');
   
   @override
-  String get apiBaseUrl => 'https://tu-api-testing.com/api';
+  String get apiBaseUrl => const String.fromEnvironment('API_BASE_URL_TEST', defaultValue: '');
   
   @override
   bool get isProduction => false;

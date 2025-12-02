@@ -6,6 +6,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../data/services/documentos_service.dart';
 import '../../../data/models/documento_model.dart';
+import '../../widgets/skeleton_loader.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/custom_snackbar.dart';
 
 class UploadDocumentosScreen extends StatefulWidget {
   const UploadDocumentosScreen({super.key});
@@ -93,11 +96,14 @@ class _UploadDocumentosScreenState extends State<UploadDocumentosScreen>
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const DocumentListSkeleton(itemCount: 5)
             : SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(AppConstants.paddingLarge),
-                  child: Column(
+                child: RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: _handleRefresh,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppConstants.paddingLarge),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Header informativo
@@ -138,6 +144,7 @@ class _UploadDocumentosScreenState extends State<UploadDocumentosScreen>
                   ),
                 ),
               ),
+            ),
       ),
     );
   }
@@ -236,39 +243,8 @@ class _UploadDocumentosScreenState extends State<UploadDocumentosScreen>
 
   Widget _buildDocumentosList() {
     if (_documentos.isEmpty) {
-      return Card(
-        elevation: 2,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppConstants.paddingLarge * 2),
-          child: Column(
-            children: [
-              Icon(
-                Icons.description_outlined,
-                size: 64,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(height: AppConstants.paddingMedium),
-              Text(
-                'No hay documentos subidos',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: AppConstants.paddingSmall),
-              Text(
-                'Sube tu primer documento usando el botón de arriba',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      return EmptyDocumentsState(
+        onUpload: _pickAndUploadFile,
       );
     }
 
@@ -620,22 +596,19 @@ class _UploadDocumentosScreenState extends State<UploadDocumentosScreen>
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  Future<void> _handleRefresh() async {
+    await _loadDocumentos();
+    if (mounted) {
+      CustomSnackBar.showSuccess(context, 'Lista actualizada');
+    }
+  }
+
   void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.success,
-      ),
-    );
+    CustomSnackBar.showSuccess(context, message);
   }
 
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
+    CustomSnackBar.showError(context, message);
   }
 
   // ============================================

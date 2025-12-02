@@ -21,7 +21,7 @@ migrate_working_dir/
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
-#.vscode/
+.vscode/launch.json
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -47,3 +47,11 @@ app.*.map.json
 # Firebase credentials (NEVER commit these!)
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.production
+.env.development
+*.env
+!.env.example
