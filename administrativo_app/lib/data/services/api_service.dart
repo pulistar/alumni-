@@ -1,15 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
+
 import '../../core/config/api_config.dart';
-import '../models/login_request.dart';
 import '../models/auth_response.dart';
+import '../models/login_request.dart';
 import '../models/module.dart';
 import '../models/egresado.dart';
-import '../models/carrera.dart';
-import '../models/grado_academico.dart';
 
-/// API Service
-/// Handles HTTP requests to the backend API
+/// API Service for administrative operations
 class ApiService {
   /// Login admin user
   Future<AuthResponse> login(LoginRequest request) async {
@@ -372,7 +372,17 @@ class ApiService {
       );
       
       request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      
+      // Determine content type based on file extension
+      final contentType = filePath.toLowerCase().endsWith('.xlsx')
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/vnd.ms-excel';
+      
+      request.files.add(await http.MultipartFile.fromPath(
+        'file',
+        filePath,
+        contentType: http_parser.MediaType.parse(contentType),
+      ));
       
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -727,195 +737,216 @@ class ApiService {
       throw Exception('Error al cambiar estado');
     }
   }
-}
 
+  // ==================== CARRERAS ====================
 
-import '../models/grado_academico.dart';
+  /// Get all carreras
+  Future<List<dynamic>> getCarreras(String token, {bool? activa}) async {
+    try {
+      var uri = Uri.parse('${ApiConfig.baseUrl}/admin/carreras');
+      if (activa != null) {
+        uri = Uri.parse('${ApiConfig.baseUrl}/admin/carreras?activa=$activa');
+      }
 
-// ==================== CARRERAS ====================
-
-/// Get all carreras
-Future<List<Carrera>> getCarreras(String token) async {
-  try {
-    final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/admin/carreras'),
-      headers: {
-        'Content-Type': 'application/json',
+      final response = await http.get(uri, headers: {
         'Authorization': 'Bearer $token',
-      },
-    );
+        'Content-Type': 'application/json',
+      });
 
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = jsonDecode(response.body) as List<dynamic>;
-      return jsonList.map((json) => Carrera.fromJson(json as Map<String, dynamic>)).toList();
-    } else {
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al obtener carreras');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error al obtener carreras');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al obtener carreras');
   }
-}
 
-/// Create carrera
-Future<Carrera> createCarrera(String token, Map<String, dynamic> data) async {
-  try {
-    final response = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/admin/carreras'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(data),
-    );
+  /// Create carrera
+  Future<dynamic> createCarrera(String token, Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/admin/carreras'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(data),
+      );
 
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return Carrera.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } else {
+      if (response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al crear carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error al crear carrera');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al crear carrera');
   }
-}
 
-/// Update carrera
-Future<Carrera> updateCarrera(String token, String id, Map<String, dynamic> data) async {
-  try {
-    final response = await http.patch(
-      Uri.parse('${ApiConfig.baseUrl}/admin/carreras/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(data),
-    );
+  /// Update carrera
+  Future<dynamic> updateCarrera(String token, String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/admin/carreras/$id'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(data),
+      );
 
-    if (response.statusCode == 200) {
-      return Carrera.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } else {
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al actualizar carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error al actualizar carrera');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al actualizar carrera');
   }
-}
 
-/// Toggle carrera activa status
-Future<Carrera> toggleCarrera(String token, String id) async {
-  try {
-    final response = await http.patch(
-      Uri.parse('${ApiConfig.baseUrl}/admin/carreras/$id/toggle'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+  /// Toggle carrera activa status
+  Future<void> toggleCarrera(String token, String id) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/admin/carreras/$id/toggle'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      return Carrera.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } else {
-      throw Exception('Error al cambiar estado de carrera');
+      if (response.statusCode != 200) {
+        throw Exception('Error al cambiar estado de carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al cambiar estado');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al cambiar estado');
   }
-}
 
-// ==================== GRADOS ACADÉMICOS ====================
+  // ==================== GRADOS ACADÉMICOS ====================
 
-/// Get all grados académicos
-Future<List<GradoAcademico>> getGradosAcademicos(String token) async {
-  try {
-    final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos'),
-      headers: {
-        'Content-Type': 'application/json',
+  /// Get all grados academicos
+  Future<List<dynamic>> getGradosAcademicos(String token, {bool? activo}) async {
+    try {
+      var uri = Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos');
+      if (activo != null) {
+        uri = Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos?activo=$activo');
+      }
+
+      final response = await http.get(uri, headers: {
         'Authorization': 'Bearer $token',
-      },
-    );
+        'Content-Type': 'application/json',
+      });
 
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = jsonDecode(response.body) as List<dynamic>;
-      return jsonList.map((json) => GradoAcademico.fromJson(json as Map<String, dynamic>)).toList();
-    } else {
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al obtener grados académicos');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error al obtener grados académicos');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al obtener grados académicos');
   }
-}
 
-/// Create grado académico
-Future<GradoAcademico> createGradoAcademico(String token, Map<String, dynamic> data) async {
-  try {
-    final response = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(data),
-    );
+  /// Create grado academico
+  Future<dynamic> createGradoAcademico(String token, Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(data),
+      );
 
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return GradoAcademico.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } else {
+      if (response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al crear grado académico');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error al crear grado académico');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al crear grado académico');
   }
-}
 
-/// Update grado académico
-Future<GradoAcademico> updateGradoAcademico(String token, String id, Map<String, dynamic> data) async {
-  try {
-    final response = await http.patch(
-      Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(data),
-    );
+  /// Update grado academico
+  Future<dynamic> updateGradoAcademico(String token, String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos/$id'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(data),
+      );
 
-    if (response.statusCode == 200) {
-      return GradoAcademico.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } else {
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al actualizar grado académico');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error al actualizar grado académico');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al actualizar grado académico');
   }
-}
 
-/// Toggle grado académico activo status
-Future<GradoAcademico> toggleGradoAcademico(String token, String id) async {
-  try {
-    final response = await http.patch(
-      Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos/$id/toggle'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+  /// Toggle grado academico activo status
+  Future<void> toggleGradoAcademico(String token, String id) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/admin/grados-academicos/$id/toggle'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      return GradoAcademico.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    } else {
-      throw Exception('Error al cambiar estado de grado académico');
+      if (response.statusCode != 200) {
+        throw Exception('Error al cambiar estado de grado académico');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al cambiar estado');
     }
-  } catch (e) {
-    if (e is Exception) rethrow;
-    throw Exception('Error al cambiar estado');
   }
-}
+
+  /// Send invitations from Excel
+  Future<Map<String, dynamic>> sendInvitationsExcel(String token, File file) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/admin/invitaciones/excel');
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers.addAll({
+        'Authorization': 'Bearer $token',
+      });
+
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Error al enviar invitaciones: ${response.body}');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al enviar invitaciones: $e');
+    }
+  }
+
 
 }

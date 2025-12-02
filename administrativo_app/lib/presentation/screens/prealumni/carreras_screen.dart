@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/carrera.dart';
 import '../../../data/services/api_service.dart';
-import '../../../core/providers/auth_provider.dart';
+import '../../../data/services/auth_service.dart';
 
 class CarrerasScreen extends StatefulWidget {
   const CarrerasScreen({Key? key}) : super(key: key);
@@ -27,8 +27,11 @@ class _CarrerasScreenState extends State<CarrerasScreen> {
   Future<void> _loadCarreras() async {
     setState(() => _isLoading = true);
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final carreras = await _apiService.getCarreras(authProvider.token!);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+      if (token == null) throw Exception('No hay token');
+      final data = await _apiService.getCarreras(token);
+      final carreras = data.map((json) => Carrera.fromJson(json)).toList();
       setState(() {
         _carreras = carreras;
         _filteredCarreras = carreras;
@@ -115,7 +118,9 @@ class _CarrerasScreenState extends State<CarrerasScreen> {
                 Navigator.pop(context);
 
                 try {
-                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  final authService = Provider.of<AuthService>(context, listen: false);
+                  final token = authService.accessToken;
+                  if (token == null) throw Exception('No hay token');
                   final data = {
                     'nombre': nombreController.text.trim(),
                     'codigo': codigoController.text.trim().isEmpty ? null : codigoController.text.trim(),
@@ -123,14 +128,14 @@ class _CarrerasScreenState extends State<CarrerasScreen> {
                   };
 
                   if (carrera == null) {
-                    await _apiService.createCarrera(authProvider.token!, data);
+                    await _apiService.createCarrera(token, data);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Carrera creada exitosamente')),
                       );
                     }
                   } else {
-                    await _apiService.updateCarrera(authProvider.token!, carrera.id, data);
+                    await _apiService.updateCarrera(token, carrera.id, data);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Carrera actualizada exitosamente')),
@@ -157,8 +162,10 @@ class _CarrerasScreenState extends State<CarrerasScreen> {
 
   Future<void> _toggleCarrera(Carrera carrera) async {
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await _apiService.toggleCarrera(authProvider.token!, carrera.id);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+      if (token == null) throw Exception('No hay token');
+      await _apiService.toggleCarrera(token, carrera.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

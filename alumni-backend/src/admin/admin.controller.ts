@@ -21,11 +21,13 @@ import { FiltrosEgresadosDto } from './dto/filtros-egresados.dto';
 import { SearchEgresadosDto } from './dto/search-egresados.dto';
 import { CreatePreguntaDto, UpdatePreguntaDto } from './dto/pregunta.dto';
 import { CreateModuloDto, UpdateModuloDto } from './dto/modulo.dto';
+import { CreateCarreraDto, UpdateCarreraDto } from './dto/carrera.dto';
+import { CreateGradoAcademicoDto, UpdateGradoAcademicoDto } from './dto/grado-academico.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('admin')
 @ApiBearerAuth('JWT-auth')
@@ -135,16 +137,7 @@ export class AdminController {
   @UseInterceptors(FileInterceptor('file'))
   async habilitarDesdeExcel(
     @CurrentUser() admin: any,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new FileTypeValidator({
-            fileType: /(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel)$/,
-          }),
-        ],
-      }),
-    )
-    file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File,
   ) {
     return this.adminService.habilitarDesdeExcel(file, admin.id);
   }
@@ -202,7 +195,6 @@ export class AdminController {
 
     res.send(buffer);
   }
-
 
   // ==================== CRUD DE PREGUNTAS ====================
 
@@ -285,5 +277,106 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
   async toggleModulo(@Param('id') id: string) {
     return this.adminService.toggleModulo(id);
+  }
+
+  // ==================== CRUD DE CARRERAS ====================
+
+  @Get('carreras')
+  @ApiOperation({ summary: 'Listar todas las carreras' })
+  @ApiQuery({ name: 'activa', required: false, type: Boolean })
+  @ApiResponse({ status: 200, description: 'Lista de carreras' })
+  async getCarreras(@Query('activa') activa?: boolean) {
+    return this.adminService.getCarreras(activa);
+  }
+
+  @Get('carreras/:id')
+  @ApiOperation({ summary: 'Obtener una carrera por ID' })
+  @ApiResponse({ status: 200, description: 'Carrera encontrada' })
+  @ApiResponse({ status: 404, description: 'Carrera no encontrada' })
+  async getCarrera(@Param('id') id: string) {
+    return this.adminService.getCarrera(id);
+  }
+
+  @Post('carreras')
+  @ApiOperation({ summary: 'Crear una nueva carrera' })
+  @ApiResponse({ status: 201, description: 'Carrera creada exitosamente' })
+  @HttpCode(HttpStatus.CREATED)
+  async createCarrera(@Body() dto: CreateCarreraDto) {
+    return this.adminService.createCarrera(dto);
+  }
+
+  @Patch('carreras/:id')
+  @ApiOperation({ summary: 'Actualizar una carrera' })
+  @ApiResponse({ status: 200, description: 'Carrera actualizada' })
+  @ApiResponse({ status: 404, description: 'Carrera no encontrada' })
+  async updateCarrera(@Param('id') id: string, @Body() dto: UpdateCarreraDto) {
+    return this.adminService.updateCarrera(id, dto);
+  }
+
+  @Patch('carreras/:id/toggle')
+  @ApiOperation({ summary: 'Activar/desactivar una carrera' })
+  @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  async toggleCarrera(@Param('id') id: string) {
+    return this.adminService.toggleCarrera(id);
+  }
+
+  // ==================== CRUD DE GRADOS ACADÉMICOS ====================
+
+  @Get('grados-academicos')
+  @ApiOperation({ summary: 'Listar todos los grados académicos' })
+  @ApiQuery({ name: 'activo', required: false, type: Boolean })
+  @ApiResponse({ status: 200, description: 'Lista de grados académicos' })
+  async getGradosAcademicos(@Query('activo') activo?: boolean) {
+    return this.adminService.getGradosAcademicos(activo);
+  }
+
+  @Get('grados-academicos/:id')
+  @ApiOperation({ summary: 'Obtener un grado académico por ID' })
+  @ApiResponse({ status: 200, description: 'Grado académico encontrado' })
+  @ApiResponse({ status: 404, description: 'Grado académico no encontrado' })
+  async getGradoAcademico(@Param('id') id: string) {
+    return this.adminService.getGradoAcademico(id);
+  }
+
+  @Post('grados-academicos')
+  @ApiOperation({ summary: 'Crear un nuevo grado académico' })
+  @ApiResponse({ status: 201, description: 'Grado académico creado exitosamente' })
+  @HttpCode(HttpStatus.CREATED)
+  async createGradoAcademico(@Body() dto: CreateGradoAcademicoDto) {
+    return this.adminService.createGradoAcademico(dto);
+  }
+
+  @Patch('grados-academicos/:id')
+  @ApiOperation({ summary: 'Actualizar un grado académico' })
+  @ApiResponse({ status: 200, description: 'Grado académico actualizado' })
+  @ApiResponse({ status: 404, description: 'Grado académico no encontrado' })
+  async updateGradoAcademico(@Param('id') id: string, @Body() dto: UpdateGradoAcademicoDto) {
+    return this.adminService.updateGradoAcademico(id, dto);
+  }
+
+  @Patch('grados-academicos/:id/toggle')
+  @ApiOperation({ summary: 'Activar/desactivar un grado académico' })
+  @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  async toggleGradoAcademico(@Param('id') id: string) {
+    return this.adminService.toggleGradoAcademico(id);
+  }
+
+  @Post('invitaciones/excel')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Enviar invitaciones masivas desde Excel' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  async sendInvitationsExcel(@UploadedFile() file: Express.Multer.File) {
+    return this.adminService.sendInvitationsFromExcel(file);
   }
 }

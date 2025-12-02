@@ -10,6 +10,8 @@ import '../../../data/services/auth_service.dart';
 import 'egresados_list_screen.dart';
 import 'preguntas_screen.dart';
 import 'modulos_screen.dart';
+import 'carreras_screen.dart';
+import 'grados_academicos_screen.dart';
 import 'estadisticas_screen.dart';
 import 'pdfs_unificados_screen.dart';
 
@@ -381,8 +383,78 @@ class _PreAlumniDashboardScreenState extends State<PreAlumniDashboardScreen> {
             );
           },
         ),
+        const SizedBox(height: 12),
+        _buildActionCard(
+          'Enviar Invitaciones',
+          'Enviar correos masivos desde Excel',
+          Icons.email,
+          Colors.teal,
+          _sendInvitations,
+        ),
       ],
     );
+  }
+
+  Future<void> _sendInvitations() async {
+    try {
+      // Import file_picker
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx', 'xls'],
+      );
+
+      if (result == null || result.files.single.path == null) {
+        return;
+      }
+
+      final filePath = result.files.single.path!;
+      
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Enviando invitaciones...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+
+      if (token == null) {
+        throw Exception('No hay token de autenticación');
+      }
+
+      final resultado = await _apiService.sendInvitationsExcel(token, File(filePath));
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      _showResultsDialog(resultado);
+      
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _handleExcelUpload() async {
@@ -453,20 +525,20 @@ class _PreAlumniDashboardScreenState extends State<PreAlumniDashboardScreen> {
 
   void _showResultsDialog(Map<String, dynamic> resultado) {
     final procesados = resultado['procesados'] ?? 0;
-    final exitosos = resultado['exitosos'] ?? 0;
+    final enviados = resultado['enviados'] ?? 0;
     final errores = (resultado['errores'] as List?) ?? [];
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Resultados de la Carga'),
+        title: const Text('Resultados del Envío'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('📊 Total procesados: $procesados'),
-              Text('✅ Habilitados exitosamente: $exitosos', 
+              Text('✅ Invitaciones enviadas: $enviados', 
                 style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
               Text('❌ Errores: ${errores.length}', 
                 style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),

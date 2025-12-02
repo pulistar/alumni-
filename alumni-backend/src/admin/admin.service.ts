@@ -1,4 +1,4 @@
-import {
+ï»¿import {
   Injectable,
   Logger,
   NotFoundException,
@@ -33,7 +33,7 @@ export class AdminService {
     const { page = 1, limit = 20, search, ...filters } = filtros;
     const offset = (page - 1) * limit;
 
-    // Build query
+    // Build query WITHOUT estados_laborales join
     let query = this.supabaseService
       .getClient()
       .from('egresados')
@@ -53,9 +53,6 @@ export class AdminService {
         created_at,
         carrera_id,
         carreras (
-          nombre
-        ),
-        estados_laborales (
           nombre
         )
       `,
@@ -93,6 +90,28 @@ export class AdminService {
     if (error) {
       this.logger.error(`Error fetching egresados: ${error.message}`);
       throw new InternalServerErrorException('Error al obtener lista de egresados');
+    }
+
+    // Manually fetch estados_laborales for the egresados
+    if (data && data.length > 0) {
+      const estadoIds = [...new Set(data.map(e => e.estado_laboral_id).filter(Boolean))];
+
+      if (estadoIds.length > 0) {
+        const { data: estados } = await this.supabaseService
+          .getClient()
+          .from('estados_laborales')
+          .select('id, nombre')
+          .in('id', estadoIds);
+
+        const estadosMap = new Map((estados || []).map(e => [e.id, e]));
+
+        // Add estado_laboral_id property with the estado data
+        data.forEach((egresado: any) => {
+          if (egresado.estado_laboral_id) {
+            egresado.estado_laboral_id = estadosMap.get(egresado.estado_laboral_id) || null;
+          }
+        });
+      }
     }
 
     return {
@@ -317,8 +336,20 @@ export class AdminService {
 
     const { data: egresadosAll } = await client
       .from('egresados')
-      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral_id, estados_laborales(nombre)')
+      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral_id')
       .is('deleted_at', null);
+
+    // Manually fetch estados_laborales
+    const estadoIds = [...new Set((egresadosAll || []).map(e => e.estado_laboral_id).filter(Boolean))];
+    let estadosMap = new Map();
+
+    if (estadoIds.length > 0) {
+      const { data: estados } = await client
+        .from('estados_laborales')
+        .select('id, nombre')
+        .in('id', estadoIds);
+      estadosMap = new Map((estados || []).map(e => [e.id, e]));
+    }
 
     const resumenPorCarreraMap = new Map<
       string,
@@ -348,7 +379,8 @@ export class AdminService {
       if (e.autoevaluacion_completada) curr.autoevaluaciones_completas++;
 
       // Employment stats
-      const estado = (e.estados_laborales as any)?.nombre?.toLowerCase() || '';
+      const estadoData = estadosMap.get(e.estado_laboral_id);
+      const estado = estadoData?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         curr.empleados++;
       } else if (estado === 'desempleado') {
@@ -419,7 +451,7 @@ export class AdminService {
 
     const { data: egresados, error } = await client
       .from('egresados')
-      .select('estado_laboral_id, estados_laborales(nombre)')
+      .select('estado_laboral_id')
       .is('deleted_at', null)
       .not('estado_laboral_id', 'is', null);
 
@@ -430,9 +462,22 @@ export class AdminService {
 
     this.logger.log(`Found ${egresados?.length || 0} egresados with estado_laboral`);
 
+    // Manually fetch estados_laborales
+    const estadoIds = [...new Set((egresados || []).map(e => e.estado_laboral_id).filter(Boolean))];
+    let estadosMap = new Map();
+
+    if (estadoIds.length > 0) {
+      const { data: estados } = await client
+        .from('estados_laborales')
+        .select('id, nombre')
+        .in('id', estadoIds);
+      estadosMap = new Map((estados || []).map(e => [e.id, e]));
+    }
+
     const stats = (egresados || []).reduce(
       (acc: any, e: any) => {
-        const estado = (e.estados_laborales as any)?.nombre?.toLowerCase() || '';
+        const estadoData = estadosMap.get(e.estado_laboral_id);
+        const estado = estadoData?.nombre?.toLowerCase() || '';
         if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
           acc.empleados++;
         } else if (estado === 'desempleado') {
@@ -470,7 +515,7 @@ export class AdminService {
 
     const { data: egresados } = await client
       .from('egresados')
-      .select('carrera_id, estado_laboral_id, carreras(nombre), estados_laborales(nombre)')
+      .select('carrera_id, estado_laboral_id, carreras(nombre), estado_laboral_id:estados_laborales(nombre)')
       .is('deleted_at', null);
 
     // Group by career
@@ -480,7 +525,7 @@ export class AdminService {
         acc[carrera] = { empleados: 0, desempleados: 0, estudiando: 0, otros: 0, total: 0 };
       }
 
-      const estado = (e.estados_laborales as any)?.nombre?.toLowerCase() || '';
+      const estado = (e.estado_laboral_id as any)?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         acc[carrera].empleados++;
       } else if (estado === 'desempleado') {
@@ -538,7 +583,7 @@ export class AdminService {
       { etapa: 'Total Egresados', total: totalEgresados || 0 },
       { etapa: 'Habilitados', total: habilitados || 0 },
       { etapa: 'Documentos Completos', total: documentosCompletos || 0 },
-      { etapa: 'Autoevaluación Completa', total: autoevaluacionesCompletas || 0 },
+      { etapa: 'Autoevaluaciï¿½n Completa', total: autoevaluacionesCompletas || 0 },
     ];
   }
 
@@ -560,7 +605,7 @@ export class AdminService {
 
     // Group by category and calculate average
     const grouped = respuestas.reduce((acc: any, r: any) => {
-      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categoría';
+      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categorï¿½a';
       if (!acc[categoria]) {
         acc[categoria] = { sum: 0, count: 0 };
       }
@@ -602,7 +647,7 @@ export class AdminService {
     if (habilitado) {
       await this.notificacionesService.crear({
         egresado_id: egresadoId,
-        titulo: '¡Tu cuenta ha sido habilitada!',
+        titulo: 'ï¿½Tu cuenta ha sido habilitada!',
         mensaje: 'Ya puedes subir tus documentos de grado y comenzar tu proceso.',
         tipo: 'habilitacion',
         url_accion: '/documentos',
@@ -626,18 +671,22 @@ export class AdminService {
    */
   async habilitarDesdeExcel(file: Express.Multer.File, adminId: string) {
     if (!file) {
-      throw new BadRequestException('No se proporcionó ningún archivo');
+      throw new BadRequestException('No se proporcionï¿½ ningï¿½n archivo');
     }
 
     try {
       // Read Excel file
+
+      // Read Excel file
       const workbook = XLSX.read(file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const rawData: any[] = XLSX.utils.sheet_to_json(sheet);
+
+      // Start from row 2 (index 1) because row 1 is a title
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { range: 1 });
 
       if (rawData.length === 0) {
-        throw new BadRequestException('El archivo Excel está vacío');
+        throw new BadRequestException('El archivo Excel estÃ¡ vacÃ­o o no tiene datos vÃ¡lidos');
       }
 
       // Normalize headers (lowercase, trim)
@@ -664,33 +713,57 @@ export class AdminService {
       // Process each row
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
-        const rowNumber = i + 2; // Excel rows start at 1, header is row 1
+        const rowNumber = i + 3; // Excel rows start at 1, title is row 1, header is row 2, data starts at 3
 
         try {
-          // Accept different header names: correo_institucional, email
-          const correo_institucional = row['correo_institucional'] || row['email'] || row['e-mail'];
-          const nombre = row['nombre'] || row['first_name'];
-          const apellido = row['apellido'] || row['last_name'];
+          // Map columns from the specific format provided
+          const id_universitario = row['id estudiante'];
+          const documento = row['documento'];
+          const nombreCompleto = row['nombre'];
+          const correo_institucional = row['correo-e campus'];
+          const correo_personal = row['correo-e particular'];
 
-          // Validate required fields
-          if (!correo_institucional || !nombre || !apellido) {
+          // Optional fields
+          const celular = row['celular'];
+          const telefono = row['tel domicilio'];
+          const lugar_expedicion = row['lugar de exp'];
+
+          // Strict Validation: All key fields must be present
+          if (!id_universitario || !documento || !nombreCompleto || !correo_institucional || !correo_personal) {
             resultados.errores.push({
               fila: rowNumber,
               correo_institucional: correo_institucional || 'N/A',
-              error: 'Faltan campos requeridos (correo_institucional, nombre, apellido)',
+              error: 'Faltan campos requeridos (Id Estudiante, Documento, Nombre, Correo-E Campus, Correo-E Particular)',
             });
             continue;
           }
 
-          // Get carrera_id
+          // Split nombre into nombre and apellido
+          // Assuming "First Last" or "First Middle Last"
+          // Strategy: First token is nombre, rest is apellido
+          const nombreParts = String(nombreCompleto).trim().split(' ');
+          let nombre = nombreParts[0];
+          let apellido = nombreParts.slice(1).join(' ');
+
+          if (!apellido) {
+            apellido = '.'; // Placeholder if no last name found
+          }
+
+          // Get carrera_id if 'programa ac' column exists
           let carreraId = null;
-          if (row['carrera']) {
-            carreraId = carrerasMap.get(String(row['carrera']).toLowerCase());
+          // Check for 'programa ac' or 'programa academico' or just 'carrera'
+          const carreraRaw = row['programa ac'] || row['programa academico'] || row['carrera'];
+
+          if (carreraRaw) {
+            carreraId = carrerasMap.get(String(carreraRaw).toLowerCase());
+            // Note: If career not found, we log it but maybe we shouldn't block the user creation?
+            // User asked for strict validation on the fields above. 
+            // Let's keep the logic: if career provided but not found, it's an error.
             if (!carreraId) {
               resultados.errores.push({
                 fila: rowNumber,
                 correo_institucional,
-                error: `Carrera "${row['carrera']}" no encontrada`,
+                error: `Carrera "${carreraRaw}" no encontrada`,
               });
               continue;
             }
@@ -713,16 +786,30 @@ export class AdminService {
             continue;
           }
 
+
           if (existente) {
-            // Update existing
+            // Update existing with new data from Excel
+            const updateData: any = {
+              habilitado: true,
+              fecha_habilitacion: new Date().toISOString(),
+              id_universitario: id_universitario,
+              documento: documento,
+              nombre: nombre,
+              apellido: apellido,
+              correo_personal: correo_personal,
+            };
+
+            if (celular) updateData.celular = celular;
+            if (telefono) updateData.telefono_alternativo = telefono;
+            if (lugar_expedicion) updateData.lugar_expedicion = lugar_expedicion;
+            if (carreraId) updateData.carrera_id = carreraId;
+
             const { error: updError } = await this.supabaseService
               .getClient()
               .from('egresados')
-              .update({
-                habilitado: true,
-                fecha_habilitacion: new Date().toISOString(),
-              })
+              .update(updateData)
               .eq('id', existente.id);
+
 
             if (updError) {
               resultados.errores.push({
@@ -736,7 +823,7 @@ export class AdminService {
             // Create notification
             await this.notificacionesService.crear({
               egresado_id: existente.id,
-              titulo: '¡Tu cuenta ha sido habilitada!',
+              titulo: 'ï¿½Tu cuenta ha sido habilitada!',
               mensaje: 'Ya puedes subir tus documentos de grado.',
               tipo: 'habilitacion',
               url_accion: '/documentos',
@@ -823,7 +910,7 @@ export class AdminService {
                     id,
                     nombre
                 ),
-                estados_laborales (
+                estado_laboral_id:estados_laborales (
                     id,
                     nombre
                 )
@@ -863,7 +950,7 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error in search: ${error.message}`);
-      throw new InternalServerErrorException('Error en la búsqueda');
+      throw new InternalServerErrorException('Error en la bï¿½squeda');
     }
 
     return {
@@ -895,10 +982,10 @@ export class AdminService {
       { header: 'Apellido', key: 'apellido', width: 20 },
       { header: 'correo_institucional', key: 'correo_institucional', width: 35 },
       { header: 'Carrera', key: 'carrera', width: 35 },
-      { header: 'Teléfono', key: 'celular', width: 15 },
+      { header: 'Telï¿½fono', key: 'celular', width: 15 },
       { header: 'Estado Laboral', key: 'estado_laboral', width: 20 },
       { header: 'Habilitado', key: 'habilitado', width: 12 },
-      { header: 'Autoevaluación', key: 'autoevaluacion', width: 15 },
+      { header: 'Autoevaluaciï¿½n', key: 'autoevaluacion', width: 15 },
       { header: 'Fecha Registro', key: 'created_at', width: 20 },
     ];
 
@@ -911,8 +998,8 @@ export class AdminService {
         correo_institucional: egresado.correo_institucional,
         carrera: (egresado.carreras as any)?.nombre || 'N/A',
         celular: egresado.celular || 'N/A',
-        estado_laboral: (egresado.estados_laborales as any)?.nombre || 'N/A',
-        habilitado: egresado.habilitado ? 'Sí' : 'No',
+        estado_laboral: (egresado.estado_laboral_id as any)?.nombre || 'N/A',
+        habilitado: egresado.habilitado ? 'Sï¿½' : 'No',
         autoevaluacion: egresado.autoevaluacion_completada ? 'Completada' : 'Pendiente',
         created_at: egresado.created_at
           ? new Date(egresado.created_at).toLocaleDateString('es-CO')
@@ -1160,7 +1247,7 @@ export class AdminService {
       .order('orden', { ascending: true });
 
     // NOTA: La columna modulo_id no existe en el schema actual de preguntas_autoevaluacion
-    // Si necesitas filtrar por módulo, debes agregar esta columna a la tabla primero
+    // Si necesitas filtrar por mï¿½dulo, debes agregar esta columna a la tabla primero
     // if (moduloId) {
     //     query = query.eq('modulo_id', moduloId);
     // }
@@ -1250,7 +1337,7 @@ export class AdminService {
     return data;
   }
 
-  // ==================== CRUD DE MÓDULOS ====================
+  // ==================== CRUD DE Mï¿½DULOS ====================
 
   async getModulos(activo?: boolean) {
     let query = this.supabaseService
@@ -1267,7 +1354,7 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error fetching modules: ${error.message}`);
-      throw new InternalServerErrorException('Error al obtener módulos');
+      throw new InternalServerErrorException('Error al obtener mï¿½dulos');
     }
 
     return data;
@@ -1282,7 +1369,7 @@ export class AdminService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('Módulo no encontrado');
+      throw new NotFoundException('Mï¿½dulo no encontrado');
     }
 
     return data;
@@ -1301,10 +1388,10 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error creating module: ${error.message}`);
-      throw new InternalServerErrorException('Error al crear módulo');
+      throw new InternalServerErrorException('Error al crear mï¿½dulo');
     }
 
-    this.logger.log(`Módulo creado: ${data.id}`);
+    this.logger.log(`Mï¿½dulo creado: ${data.id}`);
     return data;
   }
 
@@ -1318,10 +1405,10 @@ export class AdminService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('Módulo no encontrado');
+      throw new NotFoundException('Mï¿½dulo no encontrado');
     }
 
-    this.logger.log(`Módulo actualizado: ${id}`);
+    this.logger.log(`Mï¿½dulo actualizado: ${id}`);
     return data;
   }
 
@@ -1337,11 +1424,314 @@ export class AdminService {
       .single();
 
     if (error) {
-      throw new InternalServerErrorException('Error al actualizar módulo');
+      throw new InternalServerErrorException('Error al actualizar mï¿½dulo');
     }
 
-    this.logger.log(`Módulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
+    this.logger.log(`Mï¿½dulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
     return data;
   }
-}
 
+
+
+
+
+  // ==================== CRUD DE CARRERAS ====================
+
+  async getCarreras(activa?: boolean) {
+    const client = this.supabaseService.getClient();
+    let query = client
+      .from('carreras')
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (activa !== undefined) {
+      query = query.eq('activa', activa);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      this.logger.error(`Error getting carreras: ${error.message}`);
+      throw new Error(`Error al obtener carreras: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async getCarrera(id: string) {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from('carreras')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      this.logger.error(`Error getting carrera: ${error.message}`);
+      throw new Error(`Error al obtener carrera: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async createCarrera(dto: any) {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from('carreras')
+      .insert({
+        nombre: dto.nombre,
+        codigo: dto.codigo,
+        activa: dto.activa !== undefined ? dto.activa : true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error creating carrera: ${error.message}`);
+      throw new Error(`Error al crear carrera: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async updateCarrera(id: string, dto: any) {
+    const client = this.supabaseService.getClient();
+    const updateData: any = {};
+
+    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
+    if (dto.codigo !== undefined) updateData.codigo = dto.codigo;
+    if (dto.activa !== undefined) updateData.activa = dto.activa;
+
+    const { data, error } = await client
+      .from('carreras')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error updating carrera: ${error.message}`);
+      throw new Error(`Error al actualizar carrera: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async toggleCarrera(id: string) {
+    const client = this.supabaseService.getClient();
+
+    const { data: current, error: getError } = await client
+      .from('carreras')
+      .select('activa')
+      .eq('id', id)
+      .single();
+
+    if (getError) {
+      this.logger.error(`Error getting carrera: ${getError.message}`);
+      throw new Error(`Error al obtener carrera: ${getError.message}`);
+    }
+
+    const { data, error } = await client
+      .from('carreras')
+      .update({ activa: !current.activa })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error toggling carrera: ${error.message}`);
+      throw new Error(`Error al cambiar estado de carrera: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  // ==================== CRUD DE GRADOS ACADÃ‰MICOS ====================
+
+  async getGradosAcademicos(activo?: boolean) {
+    const client = this.supabaseService.getClient();
+    let query = client
+      .from('grados_academicos')
+      .select('*')
+      .order('nivel', { ascending: true });
+
+    if (activo !== undefined) {
+      query = query.eq('activo', activo);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      this.logger.error(`Error getting grados academicos: ${error.message}`);
+      throw new Error(`Error al obtener grados acadÃ©micos: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async getGradoAcademico(id: string) {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from('grados_academicos')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      this.logger.error(`Error getting grado academico: ${error.message}`);
+      throw new Error(`Error al obtener grado acadÃ©mico: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async createGradoAcademico(dto: any) {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from('grados_academicos')
+      .insert({
+        nombre: dto.nombre,
+        codigo: dto.codigo,
+        nivel: dto.nivel,
+        activo: dto.activo !== undefined ? dto.activo : true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error creating grado academico: ${error.message}`);
+      throw new Error(`Error al crear grado acadÃ©mico: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async updateGradoAcademico(id: string, dto: any) {
+    const client = this.supabaseService.getClient();
+    const updateData: any = {};
+
+    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
+    if (dto.codigo !== undefined) updateData.codigo = dto.codigo;
+    if (dto.nivel !== undefined) updateData.nivel = dto.nivel;
+    if (dto.activo !== undefined) updateData.activo = dto.activo;
+
+    const { data, error } = await client
+      .from('grados_academicos')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error updating grado academico: ${error.message}`);
+      throw new Error(`Error al actualizar grado acadÃ©mico: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async toggleGradoAcademico(id: string) {
+    const client = this.supabaseService.getClient();
+
+    const { data: current, error: getError } = await client
+      .from('grados_academicos')
+      .select('activo')
+      .eq('id', id)
+      .single();
+
+    if (getError) {
+      this.logger.error(`Error getting grado academico: ${getError.message}`);
+      throw new Error(`Error al obtener grado acadÃ©mico: ${getError.message}`);
+    }
+
+    const { data, error } = await client
+      .from('grados_academicos')
+      .update({ activo: !current.activo })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error toggling grado academico: ${error.message}`);
+      throw new Error(`Error al cambiar estado de grado acadÃ©mico: ${error.message}`);
+    }
+
+    return data;
+  }
+
+
+  /**
+   * Send invitations from Excel file
+   */
+  async sendInvitationsFromExcel(file: Express.Multer.File) {
+    try {
+      // Read Excel file
+      const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+
+      // Start from row 2 (index 1) because row 1 is a title
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { range: 1 });
+
+      if (rawData.length === 0) {
+        throw new BadRequestException('El archivo Excel estÃ¡ vacÃ­o');
+      }
+
+      // Normalize headers
+      const data = rawData.map((r) => {
+        return Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase().trim(), v]));
+      });
+
+      const resultados = {
+        procesados: data.length,
+        enviados: 0,
+        errores: [] as any[],
+      };
+
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const rowNumber = i + 3;
+
+        try {
+          // Map columns
+          const nombreCompleto = row['nombre'];
+          const correo_institucional = row['correo-e campus'];
+          const correo_personal = row['correo-e particular'];
+
+          if (!nombreCompleto) continue;
+
+          // Split nombre
+          const nombreParts = String(nombreCompleto).trim().split(' ');
+          const nombre = nombreParts[0];
+
+          // Convert to string and validate institutional email
+          const correoInstitucionalStr = correo_institucional ? String(correo_institucional).trim() : '';
+          if (correoInstitucionalStr && correoInstitucionalStr.includes('@')) {
+            await this.mailService.sendInvitacion(correoInstitucionalStr, nombre);
+            resultados.enviados++;
+          }
+
+          // Convert to string and validate personal email
+          const correoPersonalStr = correo_personal ? String(correo_personal).trim() : '';
+          if (correoPersonalStr && correoPersonalStr.includes('@')) {
+            await this.mailService.sendInvitacion(correoPersonalStr, nombre);
+            resultados.enviados++;
+          }
+
+        } catch (err) {
+          resultados.errores.push({
+            fila: rowNumber,
+            error: err.message,
+          });
+        }
+      }
+
+      return resultados;
+
+    } catch (error) {
+      this.logger.error(`Error sending invitations: ${error.message}`);
+      throw new BadRequestException(`Error al procesar invitaciones: ${error.message}`);
+    }
+  }
+
+}

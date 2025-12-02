@@ -1,48 +1,48 @@
-import { IsOptional, IsString, IsBoolean, IsIn, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsIn, IsInt, Min, Max, IsNotEmpty } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SearchEgresadosDto {
   @ApiPropertyOptional({ description: 'Término de búsqueda (nombre, apellido, correo)' })
-  @IsOptional()
   @IsString()
-  q?: string;
+  @IsOptional()
+  q: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por ID de carrera' })
-  @IsOptional()
   @IsString()
-  carrera?: string;
+  @IsOptional()
+  carrera: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por estado laboral' })
-  @IsOptional()
   @IsString()
-  estado_laboral?: string;
+  @IsOptional()
+  estado_laboral: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por estado de habilitación' })
-  @IsOptional()
   @IsBoolean()
+  @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
-  habilitado?: boolean;
+  habilitado: boolean;
 
   @ApiPropertyOptional({
     description: 'Campo para ordenar',
     enum: ['nombre', 'apellido', 'created_at', 'fecha_registro'],
   })
-  @IsOptional()
   @IsString()
-  sort?: string;
+  @IsOptional()
+  sort: string;
 
   @ApiPropertyOptional({ description: 'Orden', enum: ['asc', 'desc'] })
-  @IsOptional()
   @IsIn(['asc', 'desc'])
-  order?: 'asc' | 'desc';
+  @IsOptional()
+  order: 'asc' | 'desc';
 
   @ApiPropertyOptional({ description: 'Número de página', minimum: 1, default: 1 })
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page?: number = 1;
+  @IsOptional()
+  page: number;
 
   @ApiPropertyOptional({
     description: 'Resultados por página',
@@ -50,10 +50,10 @@ export class SearchEgresadosDto {
     maximum: 100,
     default: 10,
   })
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number = 10;
+  @IsOptional()
+  limit: number;
 }

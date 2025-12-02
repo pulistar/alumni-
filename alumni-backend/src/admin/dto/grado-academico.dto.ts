@@ -1,17 +1,18 @@
-import { IsString, IsInt, IsBoolean, IsOptional, MaxLength, Min, Max } from 'class-validator';
+import { IsString, IsInt, IsBoolean, IsOptional, MaxLength, Min, Max, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateGradoAcademicoDto {
     @ApiProperty({ description: 'Nombre del grado académico', example: 'Pregrado' })
     @IsString()
     @MaxLength(100)
+    @IsNotEmpty()
     nombre: string;
 
     @ApiPropertyOptional({ description: 'Código del grado', example: 'PREG' })
     @IsString()
-    @IsOptional()
     @MaxLength(20)
-    codigo?: string;
+    @IsNotEmpty()
+    codigo: string;
 
     @ApiPropertyOptional({
         description: 'Nivel jerárquico del grado (1-7)',
@@ -20,39 +21,39 @@ export class CreateGradoAcademicoDto {
         maximum: 7
     })
     @IsInt()
-    @IsOptional()
     @Min(0)
     @Max(7)
-    nivel?: number;
+    @IsNotEmpty()
+    nivel: number;
 
     @ApiPropertyOptional({ description: 'Si el grado está activo', example: true, default: true })
     @IsBoolean()
-    @IsOptional()
-    activo?: boolean;
+    @IsNotEmpty()
+    activo: boolean;
 }
 
 export class UpdateGradoAcademicoDto {
     @ApiPropertyOptional({ description: 'Nombre del grado académico' })
     @IsString()
-    @IsOptional()
     @MaxLength(100)
-    nombre?: string;
+    @IsNotEmpty()
+    nombre: string;
 
     @ApiPropertyOptional({ description: 'Código del grado' })
     @IsString()
-    @IsOptional()
     @MaxLength(20)
-    codigo?: string;
+    @IsNotEmpty()
+    codigo: string;
 
     @ApiPropertyOptional({ description: 'Nivel jerárquico del grado (1-7)' })
     @IsInt()
-    @IsOptional()
     @Min(0)
     @Max(7)
-    nivel?: number;
+    @IsNotEmpty()
+    nivel: number;
 
     @ApiPropertyOptional({ description: 'Si el grado está activo' })
     @IsBoolean()
-    @IsOptional()
-    activo?: boolean;
+    @IsNotEmpty()
+    activo: boolean;
 }

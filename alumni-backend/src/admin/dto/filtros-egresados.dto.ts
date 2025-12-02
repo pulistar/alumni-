@@ -1,39 +1,39 @@
-import { IsOptional, IsBoolean, IsString, IsUUID, IsInt, Min } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsUUID, IsInt, Min, IsNotEmpty } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class FiltrosEgresadosDto {
-  @IsOptional()
   @IsUUID()
-  carrera_id?: string;
-
   @IsOptional()
+  carrera_id: string;
+
   @IsBoolean()
   @Type(() => Boolean)
-  habilitado?: boolean;
-
   @IsOptional()
+  habilitado: boolean;
+
   @IsBoolean()
   @Type(() => Boolean)
-  proceso_grado_completo?: boolean;
-
   @IsOptional()
+  proceso_grado_completo: boolean;
+
   @IsBoolean()
   @Type(() => Boolean)
-  autoevaluacion_completada?: boolean;
-
   @IsOptional()
+  autoevaluacion_completada: boolean;
+
   @IsString()
-  search?: string; // Buscar por nombre, correo, id_universitario
-
   @IsOptional()
+  search: string; // Buscar por nombre, correo, id_universitario
+
   @IsInt()
   @Min(1)
   @Type(() => Number)
-  page?: number = 1;
-
   @IsOptional()
+  page: number;
+
   @IsInt()
   @Min(1)
   @Type(() => Number)
-  limit?: number = 20;
+  @IsOptional()
+  limit: number;
 }

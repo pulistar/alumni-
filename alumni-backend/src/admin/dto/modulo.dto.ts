@@ -1,44 +1,46 @@
-import { IsString, IsOptional, IsBoolean, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateModuloDto {
   @ApiProperty({ description: 'Nombre del módulo' })
   @IsString()
+  @IsNotEmpty()
   nombre: string;
 
   @ApiPropertyOptional({ description: 'Descripción del módulo' })
-  @IsOptional()
   @IsString()
-  descripcion?: string;
+  @IsNotEmpty()
+  descripcion: string;
 
   @ApiProperty({ description: 'Orden del módulo' })
   @IsInt()
+  @IsNotEmpty()
   orden: number;
 
   @ApiPropertyOptional({ description: 'Si el módulo está activo', default: true })
-  @IsOptional()
   @IsBoolean()
-  activo?: boolean;
+  @IsNotEmpty()
+  activo: boolean;
 }
 
 export class UpdateModuloDto {
   @ApiPropertyOptional({ description: 'Nombre del módulo' })
-  @IsOptional()
   @IsString()
-  nombre?: string;
+  @IsNotEmpty()
+  nombre: string;
 
   @ApiPropertyOptional({ description: 'Descripción del módulo' })
-  @IsOptional()
   @IsString()
-  descripcion?: string;
+  @IsNotEmpty()
+  descripcion: string;
 
   @ApiPropertyOptional({ description: 'Orden del módulo' })
-  @IsOptional()
   @IsInt()
-  orden?: number;
+  @IsNotEmpty()
+  orden: number;
 
   @ApiPropertyOptional({ description: 'Si el módulo está activo' })
-  @IsOptional()
   @IsBoolean()
-  activo?: boolean;
+  @IsNotEmpty()
+  activo: boolean;
 }

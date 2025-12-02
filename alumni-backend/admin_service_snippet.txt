@@ -1,0 +1,170 @@
+    return data;
+  }
+
+  /**
+   * Process Excel file to enable multiple egresados
+   */
+  async habilitarDesdeExcel(file: Express.Multer.File, adminId: string) {
+    if (!file) {
+      throw new BadRequestException('No se proporcion� ning�n archivo');
+    }
+
+    try {
+      // Read Excel file
+      const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet);
+
+      if (rawData.length === 0) {
+        throw new BadRequestException('El archivo Excel est� vac�o');
+      }
+
+      // Normalize headers (lowercase, trim)
+      const data = rawData.map((r) => {
+        return Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase().trim(), v]));
+      });
+
+      const resultados = {
+        procesados: data.length,
+        exitosos: 0,
+        errores: [] as any[],
+      };
+
+      // Get carreras for validation
+      const { data: carreras } = await this.supabaseService
+        .getClient()
+        .from('carreras')
+        .select('id, nombre');
+
+      const carrerasMap = new Map(
+        (carreras || []).map((c) => [String(c.nombre).toLowerCase(), c.id]),
+      );
+
+      // Process each row
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const rowNumber = i + 2; // Excel rows start at 1, header is row 1
+
+        try {
+          // Accept different header names: correo_institucional, email
+          const correo_institucional = row['correo_institucional'] || row['email'] || row['e-mail'];
+          const nombre = row['nombre'] || row['first_name'];
+          const apellido = row['apellido'] || row['last_name'];
+
+          // Validate required fields
+          if (!correo_institucional || !nombre || !apellido) {
+            resultados.errores.push({
+              fila: rowNumber,
+              correo_institucional: correo_institucional || 'N/A',
+              error: 'Faltan campos requeridos (correo_institucional, nombre, apellido)',
+            });
+            continue;
+          }
+
+          // Get carrera_id
+          let carreraId = null;
+          if (row['carrera']) {
+            carreraId = carrerasMap.get(String(row['carrera']).toLowerCase());
+            if (!carreraId) {
+              resultados.errores.push({
+                fila: rowNumber,
+                correo_institucional,
+                error: `Carrera "${row['carrera']}" no encontrada`,
+              });
+              continue;
+            }
+          }
+
+          // Check if egresado exists (use maybeSingle to avoid error)
+          const { data: existente, error: existeError } = await this.supabaseService
+            .getClient()
+            .from('egresados')
+            .select('id, uid, correo_institucional, nombre, apellido')
+            .eq('correo_institucional', correo_institucional)
+            .maybeSingle();
+
+          if (existeError) {
+            resultados.errores.push({
+              fila: rowNumber,
+              correo_institucional,
+              error: existeError.message,
+            });
+            continue;
+          }
+
+          if (existente) {
+            // Update existing
+            const { error: updError } = await this.supabaseService
+              .getClient()
+              .from('egresados')
+              .update({
+                habilitado: true,
+                fecha_habilitacion: new Date().toISOString(),
+              })
+              .eq('id', existente.id);
+
+            if (updError) {
+              resultados.errores.push({
+                fila: rowNumber,
+                correo_institucional,
+                error: updError.message,
+              });
+              continue;
+            }
+
+            // Create notification
+            await this.notificacionesService.crear({
+              egresado_id: existente.id,
+              titulo: '�Tu cuenta ha sido habilitada!',
+              mensaje: 'Ya puedes subir tus documentos de grado.',
+              tipo: 'habilitacion',
+              url_accion: '/documentos',
+            });
+
+            resultados.exitosos++;
+          } else {
+            resultados.errores.push({
+              fila: rowNumber,
+              correo_institucional,
+              error: 'Egresado no existe en el sistema. Debe registrarse primero.',
+            });
+          }
+        } catch (err) {
+          resultados.errores.push({
+            fila: rowNumber,
+            correo_institucional: row['correo_institucional'] || 'N/A',
+            error: err.message,
+          });
+        }
+      }
+
+      this.logger.log(
+        `Excel processed: ${resultados.exitosos} exitosos, ${resultados.errores.length} errores`,
+      );
+
+      // Log to cargas_excel table (best effort)
+      try {
+        await this.supabaseService.getClient().from('cargas_excel').insert({
+          admin_id: adminId,
+          nombre_archivo: file.originalname,
+          total_registros: data.length,
+          registros_procesados: resultados.procesados,
+          registros_habilitados: resultados.exitosos,
+          registros_errores: resultados.errores.length,
+          errores_detalle: resultados.errores,
+        });
+      } catch (logError) {
+        this.logger.warn(`Failed to log Excel upload: ${logError.message}`);
+        // Continue anyway, don't fail the upload
+      }
+
+      return resultados;
+    } catch (error) {
+      this.logger.error(`Error processing Excel: ${error.message}`);
+      throw new BadRequestException(`Error al procesar archivo Excel: ${error.message}`);
+    }
+  }
+
+  /**
+   * Advanced search for egresados

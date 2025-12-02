@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/grado_academico.dart';
 import '../../../data/services/api_service.dart';
-import '../../../core/providers/auth_provider.dart';
+import '../../../data/services/auth_service.dart';
 
 class GradosAcademicosScreen extends StatefulWidget {
   const GradosAcademicosScreen({Key? key}) : super(key: key);
@@ -36,8 +36,11 @@ class _GradosAcademicosScreenState extends State<GradosAcademicosScreen> {
   Future<void> _loadGrados() async {
     setState(() => _isLoading = true);
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final grados = await _apiService.getGradosAcademicos(authProvider.token!);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+      if (token == null) throw Exception('No hay token');
+      final data = await _apiService.getGradosAcademicos(token);
+      final grados = data.map((json) => GradoAcademico.fromJson(json)).toList();
       setState(() {
         _grados = grados;
         _isLoading = false;
@@ -127,7 +130,9 @@ class _GradosAcademicosScreenState extends State<GradosAcademicosScreen> {
                 Navigator.pop(context);
 
                 try {
-                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  final authService = Provider.of<AuthService>(context, listen: false);
+                  final token = authService.accessToken;
+                  if (token == null) throw Exception('No hay token');
                   final data = {
                     'nombre': nombreController.text.trim(),
                     'codigo': codigoController.text.trim().isEmpty ? null : codigoController.text.trim(),
@@ -136,14 +141,14 @@ class _GradosAcademicosScreenState extends State<GradosAcademicosScreen> {
                   };
 
                   if (grado == null) {
-                    await _apiService.createGradoAcademico(authProvider.token!, data);
+                    await _apiService.createGradoAcademico(token, data);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Grado académico creado exitosamente')),
                       );
                     }
                   } else {
-                    await _apiService.updateGradoAcademico(authProvider.token!, grado.id, data);
+                    await _apiService.updateGradoAcademico(token, grado.id, data);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Grado académico actualizado exitosamente')),
@@ -170,8 +175,10 @@ class _GradosAcademicosScreenState extends State<GradosAcademicosScreen> {
 
   Future<void> _toggleGrado(GradoAcademico grado) async {
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await _apiService.toggleGradoAcademico(authProvider.token!, grado.id);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+      if (token == null) throw Exception('No hay token');
+      await _apiService.toggleGradoAcademico(token, grado.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
