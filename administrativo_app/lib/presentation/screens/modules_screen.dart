@@ -7,6 +7,8 @@ import '../widgets/custom_button.dart';
 import 'login_screen.dart';
 import 'prealumni/prealumni_dashboard_screen.dart';
 import 'prealumni/modulos_screen.dart';
+import 'prealumni/carreras_screen.dart';
+import 'prealumni/grados_academicos_screen.dart';
 
 /// Modules Screen
 /// Displays the 9 system modules/networks
@@ -166,11 +168,41 @@ class _ModulesScreenState extends State<ModulesScreen> {
                           context,
                           MaterialPageRoute(builder: (_) => const ModulosScreen()),
                         );
+                      } else if (value == 'carreras') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CarrerasScreen()),
+                        );
+                      } else if (value == 'grados') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const GradosAcademicosScreen()),
+                        );
                       } else if (value == 'refresh') {
                         _loadModules();
                       }
                     },
                     itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'carreras',
+                        child: Row(
+                          children: [
+                            Icon(Icons.school, color: Colors.blue),
+                            SizedBox(width: 12),
+                            Text('Carreras'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'grados',
+                        child: Row(
+                          children: [
+                            Icon(Icons.workspace_premium, color: Colors.purple),
+                            SizedBox(width: 12),
+                            Text('Grados Académicos'),
+                          ],
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'modules',
                         child: Row(

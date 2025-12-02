@@ -42,7 +42,7 @@ export class EgresadosService {
       .single();
 
     if (existingEmail) {
-      throw new BadRequestException('El correo ya está registrado en otro perfil');
+      throw new BadRequestException('El correo_institucional ya está registrado en otro perfil');
     }
 
     // 3. Create profile
@@ -62,7 +62,7 @@ export class EgresadosService {
     if (error) {
       this.logger.error(`Error creating profile for ${email}: ${error.message}`);
       if (error.code === '23505') {
-        throw new BadRequestException('El correo ya está registrado en otro perfil');
+        throw new BadRequestException('El correo_institucional ya está registrado en otro perfil');
       }
       throw new InternalServerErrorException('Error al crear el perfil');
     }
@@ -213,3 +213,4 @@ export class EgresadosService {
     return data;
   }
 }
+

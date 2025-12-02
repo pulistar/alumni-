@@ -27,7 +27,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('admin')
 @ApiBearerAuth('JWT-auth')
@@ -137,16 +137,7 @@ export class AdminController {
   @UseInterceptors(FileInterceptor('file'))
   async habilitarDesdeExcel(
     @CurrentUser() admin: any,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new FileTypeValidator({
-            fileType: /(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel)$/,
-          }),
-        ],
-      }),
-    )
-    file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File,
   ) {
     return this.adminService.habilitarDesdeExcel(file, admin.id);
   }
@@ -179,6 +170,21 @@ export class AdminController {
     res.send(buffer);
   }
 
+  @Get('reportes/estadisticas/excel')
+  @ApiOperation({ summary: 'Exportar estadísticas completas a Excel' })
+  @ApiResponse({ status: 200, description: 'Archivo Excel generado' })
+  async exportEstadisticasExcel(@Res() res: any) {
+    const buffer = await this.adminService.exportEstadisticasExcel();
+
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=estadisticas-${Date.now()}.xlsx`,
+    });
+
+    res.send(buffer);
+  }
+
+
   @Get('reportes/pdfs-unificados')
   @ApiOperation({ summary: 'Obtener lista de PDFs unificados por carrera' })
   @ApiQuery({ name: 'carrera', required: false, description: 'Filtrar por carrera' })
@@ -204,7 +210,6 @@ export class AdminController {
 
     res.send(buffer);
   }
-
 
   // ==================== CRUD DE PREGUNTAS ====================
 
@@ -369,5 +374,24 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
   async toggleGradoAcademico(@Param('id') id: string) {
     return this.adminService.toggleGradoAcademico(id);
+  }
+
+  @Post('invitaciones/excel')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Enviar invitaciones masivas desde Excel' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  async sendInvitationsExcel(@UploadedFile() file: Express.Multer.File) {
+    return this.adminService.sendInvitationsFromExcel(file);
   }
 }

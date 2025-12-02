@@ -228,16 +228,16 @@ export class AutoevaluacionService {
       const { data: egresado } = await this.supabaseService
         .getClient()
         .from('egresados')
-        .select('correo, nombre, apellido')
+        .select('correo_institucional, nombre, apellido')
         .eq('id', egresadoId)
         .single();
 
       if (egresado) {
         await this.mailService.sendAutoevaluacionCompletada(
-          egresado.correo,
+          egresado.correo_institucional,
           `${egresado.nombre} ${egresado.apellido}`,
         );
-        this.logger.log(`Autoevaluacion email sent to ${egresado.correo}`);
+        this.logger.log(`Autoevaluacion email sent to ${egresado.correo_institucional}`);
       }
     } catch (error) {
       this.logger.error(`Failed to send autoevaluacion email: ${error.message}`);
@@ -307,3 +307,4 @@ export class AutoevaluacionService {
     return data.id;
   }
 }
+

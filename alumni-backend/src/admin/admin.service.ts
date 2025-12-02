@@ -37,7 +37,7 @@ export class AdminService {
     const { page = 1, limit = 20, search, ...filters } = filtros;
     const offset = (page - 1) * limit;
 
-    // Build query
+    // Build query WITHOUT estados_laborales join
     let query = this.supabaseService
       .getClient()
       .from('egresados')
@@ -46,10 +46,10 @@ export class AdminService {
         id,
         nombre,
         apellido,
-        correo,
+        correo_institucional,
         id_universitario,
-        telefono,
-        estado_laboral,
+        celular,
+        estado_laboral_id,
         habilitado,
         proceso_grado_completo,
         autoevaluacion_habilitada,
@@ -82,7 +82,7 @@ export class AdminService {
     if (search) {
       const s = search.replace(/%/g, '\\%'); // escape percent if needed
       query = query.or(
-        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo.ilike.%${s}%,id_universitario.ilike.%${s}%)`,
+        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo_institucional.ilike.%${s}%,id_universitario.ilike.%${s}%)`,
       );
     }
 
@@ -94,6 +94,28 @@ export class AdminService {
     if (error) {
       this.logger.error(`Error fetching egresados: ${error.message}`);
       throw new InternalServerErrorException('Error al obtener lista de egresados');
+    }
+
+    // Manually fetch estados_laborales for the egresados
+    if (data && data.length > 0) {
+      const estadoIds = [...new Set(data.map(e => e.estado_laboral_id).filter(Boolean))];
+
+      if (estadoIds.length > 0) {
+        const { data: estados } = await this.supabaseService
+          .getClient()
+          .from('estados_laborales')
+          .select('id, nombre')
+          .in('id', estadoIds);
+
+        const estadosMap = new Map((estados || []).map(e => [e.id, e]));
+
+        // Add estado_laboral_id property with the estado data
+        data.forEach((egresado: any) => {
+          if (egresado.estado_laboral_id) {
+            egresado.estado_laboral_id = estadosMap.get(egresado.estado_laboral_id) || null;
+          }
+        });
+      }
     }
 
     return {
@@ -318,8 +340,20 @@ export class AdminService {
 
     const { data: egresadosAll } = await client
       .from('egresados')
-      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral')
+      .select('carrera_id, habilitado, proceso_grado_completo, autoevaluacion_completada, estado_laboral_id')
       .is('deleted_at', null);
+
+    // Manually fetch estados_laborales
+    const estadoIds = [...new Set((egresadosAll || []).map(e => e.estado_laboral_id).filter(Boolean))];
+    let estadosMap = new Map();
+
+    if (estadoIds.length > 0) {
+      const { data: estados } = await client
+        .from('estados_laborales')
+        .select('id, nombre')
+        .in('id', estadoIds);
+      estadosMap = new Map((estados || []).map(e => [e.id, e]));
+    }
 
     const resumenPorCarreraMap = new Map<
       string,
@@ -349,7 +383,8 @@ export class AdminService {
       if (e.autoevaluacion_completada) curr.autoevaluaciones_completas++;
 
       // Employment stats
-      const estado = e.estado_laboral?.toLowerCase() || '';
+      const estadoData = estadosMap.get(e.estado_laboral_id);
+      const estado = estadoData?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         curr.empleados++;
       } else if (estado === 'desempleado') {
@@ -420,9 +455,9 @@ export class AdminService {
 
     const { data: egresados, error } = await client
       .from('egresados')
-      .select('estado_laboral')
+      .select('estado_laboral_id')
       .is('deleted_at', null)
-      .not('estado_laboral', 'is', null);
+      .not('estado_laboral_id', 'is', null);
 
     if (error) {
       this.logger.error(`Error getting employment rate: ${error.message}`);
@@ -431,9 +466,22 @@ export class AdminService {
 
     this.logger.log(`Found ${egresados?.length || 0} egresados with estado_laboral`);
 
+    // Manually fetch estados_laborales
+    const estadoIds = [...new Set((egresados || []).map(e => e.estado_laboral_id).filter(Boolean))];
+    let estadosMap = new Map();
+
+    if (estadoIds.length > 0) {
+      const { data: estados } = await client
+        .from('estados_laborales')
+        .select('id, nombre')
+        .in('id', estadoIds);
+      estadosMap = new Map((estados || []).map(e => [e.id, e]));
+    }
+
     const stats = (egresados || []).reduce(
       (acc: any, e: any) => {
-        const estado = e.estado_laboral?.toLowerCase() || '';
+        const estadoData = estadosMap.get(e.estado_laboral_id);
+        const estado = estadoData?.nombre?.toLowerCase() || '';
         if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
           acc.empleados++;
         } else if (estado === 'desempleado') {
@@ -471,8 +519,20 @@ export class AdminService {
 
     const { data: egresados } = await client
       .from('egresados')
-      .select('carrera_id, estado_laboral, carreras(nombre)')
+      .select('carrera_id, estado_laboral_id, carreras(nombre)')
       .is('deleted_at', null);
+
+    // Manually fetch estados_laborales
+    const estadoIds = [...new Set((egresados || []).map(e => e.estado_laboral_id).filter(Boolean))];
+    let estadosMap = new Map();
+
+    if (estadoIds.length > 0) {
+      const { data: estados } = await client
+        .from('estados_laborales')
+        .select('id, nombre')
+        .in('id', estadoIds);
+      estadosMap = new Map((estados || []).map(e => [e.id, e]));
+    }
 
     // Group by career
     const grouped = (egresados || []).reduce((acc: any, e: any) => {
@@ -481,7 +541,8 @@ export class AdminService {
         acc[carrera] = { empleados: 0, desempleados: 0, estudiando: 0, otros: 0, total: 0 };
       }
 
-      const estado = e.estado_laboral?.toLowerCase() || '';
+      const estadoData = estadosMap.get(e.estado_laboral_id);
+      const estado = estadoData?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         acc[carrera].empleados++;
       } else if (estado === 'desempleado') {
@@ -555,8 +616,17 @@ export class AdminService {
       .eq('preguntas_autoevaluacion.tipo', 'likert')
       .not('respuesta_numerica', 'is', null);
 
+    // Default categories to ensure at least 3 entries for radar chart
+    const defaultCategories = [
+      { categoria: 'Competencias Técnicas', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Habilidades Blandas', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Liderazgo', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Comunicación', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Trabajo en Equipo', promedio: 0, total_respuestas: 0 },
+    ];
+
     if (!respuestas || respuestas.length === 0) {
-      return [];
+      return defaultCategories;
     }
 
     // Group by category and calculate average
@@ -570,11 +640,25 @@ export class AdminService {
       return acc;
     }, {});
 
-    return Object.entries(grouped).map(([categoria, stats]: [string, any]) => ({
+    const result = Object.entries(grouped).map(([categoria, stats]: [string, any]) => ({
       categoria,
       promedio: stats.count > 0 ? Number((stats.sum / stats.count).toFixed(2)) : 0,
       total_respuestas: stats.count,
     }));
+
+    // Ensure at least 3 categories for radar chart
+    if (result.length < 3) {
+      // Add default categories until we have at least 3
+      const existingCategories = new Set(result.map(r => r.categoria));
+      for (const defaultCat of defaultCategories) {
+        if (!existingCategories.has(defaultCat.categoria)) {
+          result.push(defaultCat);
+          if (result.length >= 5) break; // Limit to 5 categories
+        }
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -603,7 +687,7 @@ export class AdminService {
     if (habilitado) {
       await this.notificacionesService.crear({
         egresado_id: egresadoId,
-        titulo: '¡Tu cuenta ha sido habilitada!',
+        titulo: '�Tu cuenta ha sido habilitada!',
         mensaje: 'Ya puedes subir tus documentos de grado y comenzar tu proceso.',
         tipo: 'habilitacion',
         url_accion: '/documentos',
@@ -611,8 +695,8 @@ export class AdminService {
 
       // Send email notification (best-effort)
       try {
-        await this.mailService.sendCuentaHabilitada(data.correo, data.nombre, data.apellido);
-        this.logger.log(`Email sent to ${data.correo}`);
+        await this.mailService.sendCuentaHabilitada(data.correo_institucional, data.nombre, data.apellido);
+        this.logger.log(`Email sent to ${data.correo_institucional}`);
       } catch (err) {
         this.logger.error(`Failed to send email: ${err.message}`);
         // Don't throw - email is not critical
@@ -642,24 +726,33 @@ export class AdminService {
    */
   async habilitarDesdeExcel(file: Express.Multer.File, adminId: string) {
     if (!file) {
-      throw new BadRequestException('No se proporcionó ningún archivo');
+      throw new BadRequestException('No se proporcion� ning�n archivo');
     }
 
     try {
       // Read Excel file
+
+      // Read Excel file
       const workbook = XLSX.read(file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const rawData: any[] = XLSX.utils.sheet_to_json(sheet);
+
+      // Start from row 2 (index 1) because row 1 is a title
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { range: 1 });
 
       if (rawData.length === 0) {
-        throw new BadRequestException('El archivo Excel está vacío');
+        throw new BadRequestException('El archivo Excel está vacío o no tiene datos válidos');
       }
 
       // Normalize headers (lowercase, trim)
       const data = rawData.map((r) => {
         return Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase().trim(), v]));
       });
+
+      // Log headers for debugging
+      if (data.length > 0) {
+        this.logger.log(`Excel headers found: ${Object.keys(data[0]).join(', ')}`);
+      }
 
       const resultados = {
         procesados: data.length,
@@ -680,33 +773,60 @@ export class AdminService {
       // Process each row
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
-        const rowNumber = i + 2; // Excel rows start at 1, header is row 1
+        const rowNumber = i + 3; // Excel rows start at 1, title is row 1, header is row 2, data starts at 3
 
         try {
-          // Accept different header names: correo, email
-          const correo = row['correo'] || row['email'] || row['e-mail'];
-          const nombre = row['nombre'] || row['first_name'];
-          const apellido = row['apellido'] || row['last_name'];
+          // Map columns from the specific format provided
+          const id_universitario = row['id estudiante'];
+          const documento = row['documento'];
+          const nombreCompleto = row['nombre'];
+          const correo_institucional = row['correo-e campus'];
+          const correo_personal = row['correo-e particular'];
 
-          // Validate required fields
-          if (!correo || !nombre || !apellido) {
+          // Optional fields
+          const celular = row['celular'];
+          const telefono = row['tel domicilio'];
+          const lugar_expedicion = row['lugar de exp'];
+
+          // Log values for debugging
+          this.logger.log(`Row ${rowNumber}: id=${id_universitario}, doc=${documento}, nombre=${nombreCompleto}, correo_inst=${correo_institucional}, correo_pers=${correo_personal}`);
+
+          // Strict Validation: All key fields must be present
+          if (!id_universitario || !documento || !nombreCompleto || !correo_institucional || !correo_personal) {
             resultados.errores.push({
               fila: rowNumber,
-              correo: correo || 'N/A',
-              error: 'Faltan campos requeridos (correo, nombre, apellido)',
+              correo_institucional: correo_institucional || 'N/A',
+              error: 'Faltan campos requeridos (Id Estudiante, Documento, Nombre, Correo-E Campus, Correo-E Particular)',
             });
             continue;
           }
 
-          // Get carrera_id
+          // Split nombre into nombre and apellido
+          // Assuming "First Last" or "First Middle Last"
+          // Strategy: First token is nombre, rest is apellido
+          const nombreParts = String(nombreCompleto).trim().split(' ');
+          let nombre = nombreParts[0];
+          let apellido = nombreParts.slice(1).join(' ');
+
+          if (!apellido) {
+            apellido = '.'; // Placeholder if no last name found
+          }
+
+          // Get carrera_id if 'programa ac' column exists
           let carreraId = null;
-          if (row['carrera']) {
-            carreraId = carrerasMap.get(String(row['carrera']).toLowerCase());
+          // Check for 'programa ac' or 'programa academico' or just 'carrera'
+          const carreraRaw = row['programa ac'] || row['programa academico'] || row['carrera'];
+
+          if (carreraRaw) {
+            carreraId = carrerasMap.get(String(carreraRaw).toLowerCase());
+            // Note: If career not found, we log it but maybe we shouldn't block the user creation?
+            // User asked for strict validation on the fields above. 
+            // Let's keep the logic: if career provided but not found, it's an error.
             if (!carreraId) {
               resultados.errores.push({
                 fila: rowNumber,
-                correo,
-                error: `Carrera "${row['carrera']}" no encontrada`,
+                correo_institucional,
+                error: `Carrera "${carreraRaw}" no encontrada`,
               });
               continue;
             }
@@ -716,34 +836,48 @@ export class AdminService {
           const { data: existente, error: existeError } = await this.supabaseService
             .getClient()
             .from('egresados')
-            .select('id, uid, correo, nombre, apellido')
-            .eq('correo', correo)
+            .select('id, uid, correo_institucional, nombre, apellido')
+            .eq('correo_institucional', correo_institucional)
             .maybeSingle();
 
           if (existeError) {
             resultados.errores.push({
               fila: rowNumber,
-              correo,
+              correo_institucional,
               error: existeError.message,
             });
             continue;
           }
 
+
           if (existente) {
-            // Update existing
+            // Update existing with new data from Excel
+            const updateData: any = {
+              habilitado: true,
+              fecha_habilitacion: new Date().toISOString(),
+              id_universitario: id_universitario,
+              documento: documento,
+              nombre: nombre,
+              apellido: apellido,
+              correo_personal: correo_personal,
+            };
+
+            if (celular) updateData.celular = celular;
+            if (telefono) updateData.telefono_alternativo = telefono;
+            if (lugar_expedicion) updateData.lugar_expedicion = lugar_expedicion;
+            if (carreraId) updateData.carrera_id = carreraId;
+
             const { error: updError } = await this.supabaseService
               .getClient()
               .from('egresados')
-              .update({
-                habilitado: true,
-                fecha_habilitacion: new Date().toISOString(),
-              })
+              .update(updateData)
               .eq('id', existente.id);
+
 
             if (updError) {
               resultados.errores.push({
                 fila: rowNumber,
-                correo,
+                correo_institucional,
                 error: updError.message,
               });
               continue;
@@ -752,7 +886,7 @@ export class AdminService {
             // Create notification
             await this.notificacionesService.crear({
               egresado_id: existente.id,
-              titulo: '¡Tu cuenta ha sido habilitada!',
+              titulo: '�Tu cuenta ha sido habilitada!',
               mensaje: 'Ya puedes subir tus documentos de grado.',
               tipo: 'habilitacion',
               url_accion: '/documentos',
@@ -762,14 +896,14 @@ export class AdminService {
           } else {
             resultados.errores.push({
               fila: rowNumber,
-              correo,
+              correo_institucional,
               error: 'Egresado no existe en el sistema. Debe registrarse primero.',
             });
           }
         } catch (err) {
           resultados.errores.push({
             fila: rowNumber,
-            correo: row['correo'] || 'N/A',
+            correo_institucional: row['correo_institucional'] || 'N/A',
             error: err.message,
           });
         }
@@ -826,16 +960,20 @@ export class AdminService {
                 id,
                 nombre,
                 apellido,
-                correo,
+                correo_institucional,
                 id_universitario,
-                telefono,
+                celular,
                 habilitado,
                 proceso_grado_completo,
                 autoevaluacion_habilitada,
                 autoevaluacion_completada,
-                estado_laboral,
+                estado_laboral_id,
                 created_at,
                 carreras (
+                    id,
+                    nombre
+                ),
+                estado_laboral_id:estados_laborales (
                     id,
                     nombre
                 )
@@ -848,7 +986,7 @@ export class AdminService {
     if (q) {
       const s = q.replace(/%/g, '\\%');
       supabaseQuery = supabaseQuery.or(
-        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo.ilike.%${s}%)`,
+        `(nombre.ilike.%${s}%,apellido.ilike.%${s}%,correo_institucional.ilike.%${s}%)`,
       );
     }
 
@@ -858,7 +996,7 @@ export class AdminService {
     }
 
     if (estado_laboral) {
-      supabaseQuery = supabaseQuery.eq('estado_laboral', estado_laboral);
+      supabaseQuery = supabaseQuery.eq('estado_laboral_id', estado_laboral);
     }
 
     if (habilitado !== undefined) {
@@ -875,7 +1013,7 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error in search: ${error.message}`);
-      throw new InternalServerErrorException('Error en la búsqueda');
+      throw new InternalServerErrorException('Error en la b�squeda');
     }
 
     return {
@@ -905,12 +1043,12 @@ export class AdminService {
       { header: 'ID Universitario', key: 'id_universitario', width: 15 },
       { header: 'Nombre', key: 'nombre', width: 20 },
       { header: 'Apellido', key: 'apellido', width: 20 },
-      { header: 'Correo', key: 'correo', width: 35 },
+      { header: 'correo_institucional', key: 'correo_institucional', width: 35 },
       { header: 'Carrera', key: 'carrera', width: 35 },
-      { header: 'Teléfono', key: 'telefono', width: 15 },
+      { header: 'Tel�fono', key: 'celular', width: 15 },
       { header: 'Estado Laboral', key: 'estado_laboral', width: 20 },
       { header: 'Habilitado', key: 'habilitado', width: 12 },
-      { header: 'Autoevaluación', key: 'autoevaluacion', width: 15 },
+      { header: 'Autoevaluaci�n', key: 'autoevaluacion', width: 15 },
       { header: 'Fecha Registro', key: 'created_at', width: 20 },
     ];
 
@@ -920,11 +1058,11 @@ export class AdminService {
         id_universitario: egresado.id_universitario || 'N/A',
         nombre: egresado.nombre,
         apellido: egresado.apellido,
-        correo: egresado.correo,
+        correo_institucional: egresado.correo_institucional,
         carrera: (egresado.carreras as any)?.nombre || 'N/A',
-        telefono: egresado.telefono || 'N/A',
-        estado_laboral: egresado.estado_laboral || 'N/A',
-        habilitado: egresado.habilitado ? 'Sí' : 'No',
+        celular: egresado.celular || 'N/A',
+        estado_laboral: (egresado.estado_laboral_id as any)?.nombre || 'N/A',
+        habilitado: egresado.habilitado ? 'S�' : 'No',
         autoevaluacion: egresado.autoevaluacion_completada ? 'Completada' : 'Pendiente',
         created_at: egresado.created_at
           ? new Date(egresado.created_at).toLocaleDateString('es-CO')
@@ -957,7 +1095,7 @@ export class AdminService {
       .select(
         `
                 *,
-                egresado:egresados(nombre, apellido, correo, id_universitario),
+                egresado:egresados(nombre, apellido, correo_institucional, id_universitario),
                 pregunta:preguntas_autoevaluacion(texto, categoria, tipo)
             `,
       )
@@ -975,7 +1113,7 @@ export class AdminService {
     worksheet.columns = [
       { header: 'ID Universitario', key: 'id_universitario', width: 15 },
       { header: 'Egresado', key: 'egresado', width: 35 },
-      { header: 'Correo', key: 'correo', width: 35 },
+      { header: 'correo_institucional', key: 'correo_institucional', width: 35 },
       { header: 'Competencia', key: 'competencia', width: 30 },
       { header: 'Pregunta', key: 'pregunta', width: 60 },
       { header: 'Respuesta', key: 'respuesta', width: 15 },
@@ -987,7 +1125,7 @@ export class AdminService {
       worksheet.addRow({
         id_universitario: resp.egresado?.id_universitario || 'N/A',
         egresado: `${resp.egresado?.nombre || ''} ${resp.egresado?.apellido || ''}`.trim(),
-        correo: resp.egresado?.correo || 'N/A',
+        correo_institucional: resp.egresado?.correo_institucional || 'N/A',
         competencia: resp.pregunta?.categoria || 'N/A',
         pregunta: resp.pregunta?.texto || 'N/A',
         respuesta: resp.respuesta_numerica ?? resp.respuesta_texto ?? 'N/A',
@@ -1009,13 +1147,153 @@ export class AdminService {
   }
 
   /**
+   * Export estadísticas to Excel
+   */
+  async exportEstadisticasExcel(): Promise<Buffer> {
+    // Get all statistics data
+    const [
+      stats,
+      distribucion,
+      tasaEmpleabilidad,
+      empleabilidadCarrera,
+      embudo,
+      radar,
+    ] = await Promise.all([
+      this.getDashboardStats(),
+      this.getDistribucionPorCarrera(),
+      this.getTasaEmpleabilidad(),
+      this.getEmpleabilidadPorCarrera(),
+      this.getEmbudoProceso(),
+      this.getRadarCompetencias(),
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+
+    // Sheet 1: Resumen General
+    const resumenSheet = workbook.addWorksheet('Resumen General');
+    resumenSheet.columns = [
+      { header: 'Métrica', key: 'metrica', width: 30 },
+      { header: 'Valor', key: 'valor', width: 15 },
+    ];
+    resumenSheet.addRow({ metrica: 'Total Egresados', valor: stats.total_egresados });
+    resumenSheet.addRow({ metrica: 'Egresados Habilitados', valor: stats.egresados_habilitados });
+    resumenSheet.addRow({ metrica: 'Documentos Completos', valor: stats.documentos_completos });
+    resumenSheet.addRow({ metrica: 'Autoevaluaciones Completas', valor: stats.autoevaluaciones_completas });
+    this._styleHeaderRow(resumenSheet);
+
+    // Sheet 2: Distribución por Carrera
+    const distribucionSheet = workbook.addWorksheet('Distribución por Carrera');
+    distribucionSheet.columns = [
+      { header: 'Carrera', key: 'carrera', width: 40 },
+      { header: 'Total', key: 'total', width: 15 },
+    ];
+    distribucion.forEach((item: any) => {
+      distribucionSheet.addRow({ carrera: item.carrera, total: item.total });
+    });
+    this._styleHeaderRow(distribucionSheet);
+
+    // Sheet 3: Tasa de Empleabilidad
+    const empleabilidadSheet = workbook.addWorksheet('Tasa de Empleabilidad');
+    empleabilidadSheet.columns = [
+      { header: 'Estado', key: 'estado', width: 20 },
+      { header: 'Cantidad', key: 'cantidad', width: 15 },
+      { header: 'Porcentaje', key: 'porcentaje', width: 15 },
+    ];
+    empleabilidadSheet.addRow({
+      estado: 'Empleados',
+      cantidad: tasaEmpleabilidad.empleados,
+      porcentaje: `${tasaEmpleabilidad.porcentaje_empleados}%`,
+    });
+    empleabilidadSheet.addRow({
+      estado: 'Desempleados',
+      cantidad: tasaEmpleabilidad.desempleados,
+      porcentaje: `${tasaEmpleabilidad.porcentaje_desempleados}%`,
+    });
+    empleabilidadSheet.addRow({
+      estado: 'Estudiando',
+      cantidad: tasaEmpleabilidad.estudiando,
+      porcentaje: '',
+    });
+    empleabilidadSheet.addRow({
+      estado: 'Otros',
+      cantidad: tasaEmpleabilidad.otros,
+      porcentaje: '',
+    });
+    this._styleHeaderRow(empleabilidadSheet);
+
+    // Sheet 4: Empleabilidad por Carrera
+    const empleabilidadCarreraSheet = workbook.addWorksheet('Empleabilidad por Carrera');
+    empleabilidadCarreraSheet.columns = [
+      { header: 'Carrera', key: 'carrera', width: 40 },
+      { header: 'Empleados', key: 'empleados', width: 15 },
+      { header: 'Desempleados', key: 'desempleados', width: 15 },
+      { header: 'Total', key: 'total', width: 15 },
+      { header: '% Empleados', key: 'porcentaje', width: 15 },
+    ];
+    empleabilidadCarrera.forEach((item: any) => {
+      empleabilidadCarreraSheet.addRow({
+        carrera: item.carrera,
+        empleados: item.empleados,
+        desempleados: item.desempleados,
+        total: item.total,
+        porcentaje: `${item.porcentaje_empleados}%`,
+      });
+    });
+    this._styleHeaderRow(empleabilidadCarreraSheet);
+
+    // Sheet 5: Embudo de Proceso
+    const embudoSheet = workbook.addWorksheet('Embudo de Proceso');
+    embudoSheet.columns = [
+      { header: 'Etapa', key: 'etapa', width: 30 },
+      { header: 'Total', key: 'total', width: 15 },
+    ];
+    embudo.forEach((item: any) => {
+      embudoSheet.addRow({ etapa: item.etapa, total: item.total });
+    });
+    this._styleHeaderRow(embudoSheet);
+
+    // Sheet 6: Radar de Competencias
+    const radarSheet = workbook.addWorksheet('Radar de Competencias');
+    radarSheet.columns = [
+      { header: 'Categoría', key: 'categoria', width: 30 },
+      { header: 'Promedio', key: 'promedio', width: 15 },
+      { header: 'Total Respuestas', key: 'total_respuestas', width: 20 },
+    ];
+    radar.forEach((item: any) => {
+      radarSheet.addRow({
+        categoria: item.categoria,
+        promedio: item.promedio,
+        total_respuestas: item.total_respuestas,
+      });
+    });
+    this._styleHeaderRow(radarSheet);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  /**
+   * Helper method to style header row
+   */
+  private _styleHeaderRow(worksheet: ExcelJS.Worksheet) {
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } } as any;
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF003366' },
+    } as any;
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' } as any;
+  }
+
+
+  /**
    * Get list of egresados with graduation documents (Documentos de Grado), optionally filtered by career
    */
   async getPDFsUnificados(carrera?: string) {
     try {
       const client = this.supabaseService.getClient();
 
-      // Query documentos_egresado table - showing ALL documents for now
+      // Query documentos_egresado table - only unified PDFs
       let query = client
         .from('documentos_egresado')
         .select(`
@@ -1029,12 +1307,12 @@ export class AdminService {
             id,
             nombre,
             apellido,
-            correo,
+            correo_institucional,
             carrera_id,
             carreras (nombre)
           )
         `)
-        // Temporarily removed filter to debug
+        .eq('es_unificado', true)  // Only unified PDFs
         .order('created_at', { ascending: false });
 
       const { data, error } = await query;
@@ -1073,7 +1351,7 @@ export class AdminService {
           id: doc.id,
           egresado_id: doc.egresado_id,
           egresado_nombre: `${doc.egresados?.nombre || ''} ${doc.egresados?.apellido || ''}`.trim(),
-          egresado_correo: doc.egresados?.correo,
+          egresado_correo: doc.egresados?.correo_institucional,
           tipo_documento: doc.tipo_documento,
           nombre_archivo: doc.nombre_archivo,
           url_publica: publicUrl,
@@ -1172,7 +1450,7 @@ export class AdminService {
       .order('orden', { ascending: true });
 
     // NOTA: La columna modulo_id no existe en el schema actual de preguntas_autoevaluacion
-    // Si necesitas filtrar por módulo, debes agregar esta columna a la tabla primero
+    // Si necesitas filtrar por m�dulo, debes agregar esta columna a la tabla primero
     // if (moduloId) {
     //     query = query.eq('modulo_id', moduloId);
     // }
@@ -1262,7 +1540,7 @@ export class AdminService {
     return data;
   }
 
-  // ==================== CRUD DE MÓDULOS ====================
+  // ==================== CRUD DE M�DULOS ====================
 
   async getModulos(activo?: boolean) {
     let query = this.supabaseService
@@ -1279,7 +1557,7 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error fetching modules: ${error.message}`);
-      throw new InternalServerErrorException('Error al obtener módulos');
+      throw new InternalServerErrorException('Error al obtener m�dulos');
     }
 
     return data;
@@ -1294,7 +1572,7 @@ export class AdminService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('Módulo no encontrado');
+      throw new NotFoundException('M�dulo no encontrado');
     }
 
     return data;
@@ -1313,10 +1591,10 @@ export class AdminService {
 
     if (error) {
       this.logger.error(`Error creating module: ${error.message}`);
-      throw new InternalServerErrorException('Error al crear módulo');
+      throw new InternalServerErrorException('Error al crear m�dulo');
     }
 
-    this.logger.log(`Módulo creado: ${data.id}`);
+    this.logger.log(`M�dulo creado: ${data.id}`);
     return data;
   }
 
@@ -1330,10 +1608,10 @@ export class AdminService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException('Módulo no encontrado');
+      throw new NotFoundException('M�dulo no encontrado');
     }
 
-    this.logger.log(`Módulo actualizado: ${id}`);
+    this.logger.log(`M�dulo actualizado: ${id}`);
     return data;
   }
 
@@ -1349,10 +1627,96 @@ export class AdminService {
       .single();
 
     if (error) {
-      throw new InternalServerErrorException('Error al actualizar módulo');
+      throw new InternalServerErrorException('Error al actualizar m�dulo');
     }
 
-    this.logger.log(`Módulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
+    this.logger.log(`M�dulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
+    return data;
+  }
+
+
+
+
+
+  // ==================== CRUD DE CARRERAS ====================
+
+  async getCarreras(activa?: boolean) {
+    const client = this.supabaseService.getClient();
+    let query = client
+      .from('carreras')
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (activa !== undefined) {
+      query = query.eq('activa', activa);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      this.logger.error(`Error getting carreras: ${error.message}`);
+      throw new Error(`Error al obtener carreras: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async getCarrera(id: string) {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from('carreras')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      this.logger.error(`Error getting carrera: ${error.message}`);
+      throw new Error(`Error al obtener carrera: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async createCarrera(dto: any) {
+    const client = this.supabaseService.getClient();
+    const { data, error } = await client
+      .from('carreras')
+      .insert({
+        nombre: dto.nombre,
+        codigo: dto.codigo,
+        activa: dto.activa !== undefined ? dto.activa : true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error creating carrera: ${error.message}`);
+      throw new Error(`Error al crear carrera: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async updateCarrera(id: string, dto: any) {
+    const client = this.supabaseService.getClient();
+    const updateData: any = {};
+
+    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
+    if (dto.codigo !== undefined) updateData.codigo = dto.codigo;
+    if (dto.activa !== undefined) updateData.activa = dto.activa;
+
+    const { data, error } = await client
+      .from('carreras')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error updating carrera: ${error.message}`);
+      throw new Error(`Error al actualizar carrera: ${error.message}`);
+    }
+
     return data;
   }
 

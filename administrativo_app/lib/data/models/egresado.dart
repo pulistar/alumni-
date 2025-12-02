@@ -49,16 +49,27 @@ class Egresado {
       carreraNombre = json['carrera_nombre'] as String?;
     }
 
+    // Handle nested estados_laborales object
+    String? estadoLaboralNombre;
+    if (json['estados_laborales'] != null) {
+      if (json['estados_laborales'] is Map) {
+        estadoLaboralNombre = json['estados_laborales']['nombre'] as String?;
+      }
+    } else if (json['estado_laboral'] != null) {
+      // Fallback for backward compatibility
+      estadoLaboralNombre = json['estado_laboral'] as String?;
+    }
+
     return Egresado(
       id: json['id'] as String,
-      correo: json['correo'] as String,
+      correo: json['correo_institucional'] as String? ?? json['correo'] as String,
       nombre: json['nombre'] as String,
       apellido: json['apellido'] as String,
       idUniversitario: json['id_universitario'] as String?,
       carrera: carreraNombre,
-      telefono: json['telefono'] as String?,
+      telefono: json['celular'] as String? ?? json['telefono'] as String?,
       ciudad: json['ciudad'] as String?,
-      estadoLaboral: json['estado_laboral'] as String?,
+      estadoLaboral: estadoLaboralNombre,
       empresaActual: json['empresa_actual'] as String?,
       cargoActual: json['cargo_actual'] as String?,
       habilitado: json['habilitado'] as bool? ?? false,
