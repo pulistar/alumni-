@@ -60,7 +60,7 @@ class ApiService {
         body: jsonEncode({
           'nombre': nombre,
           'apellido': apellido,
-          'correo': correo,
+          'correo_institucional': correo,
           'password': password,
           'confirmPassword': password,
         }),

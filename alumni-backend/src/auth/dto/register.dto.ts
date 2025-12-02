@@ -2,10 +2,10 @@ import { IsEmail, IsNotEmpty, IsString, MinLength, Matches } from 'class-validat
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterDto {
-    @ApiProperty({ example: 'admin@example.com' })
+    @ApiProperty({ example: 'admin@ucc.edu.co' })
     @IsEmail({}, { message: 'Correo electrónico inválido' })
     @IsNotEmpty({ message: 'El correo es requerido' })
-    correo: string;
+    correo_institucional: string;
 
     @ApiProperty({ example: 'Juan' })
     @IsString()

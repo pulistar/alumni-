@@ -14,6 +14,8 @@ import '../prealumni/prealumni_screen.dart';
 import '../prealumni/not_enabled_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
+import '../settings/help_screen.dart';
+import '../../widgets/support_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -598,7 +600,11 @@ class _HomeScreenState extends State<HomeScreen>
               title: Text('Ayuda'),
               onTap: () {
                 Navigator.pop(context);
-                _showComingSoon('Ayuda');
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const HelpScreen(),
+                  ),
+                );
               },
             ),
             const Divider(),

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/support_dialog.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
@@ -61,6 +65,8 @@ class _LoginScreenState extends State<LoginScreen>
     _animationController.dispose();
     super.dispose();
   }
+
+
 
   void _sendMagicLink() {
     if (_formKey.currentState!.validate()) {
@@ -294,12 +300,7 @@ class _LoginScreenState extends State<LoginScreen>
                         const SizedBox(height: AppConstants.paddingSmall),
                         TextButton(
                           onPressed: () {
-                            // TODO: Implementar ayuda o contacto
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Contacta al administrador del sistema'),
-                              ),
-                            );
+                            SupportDialog.show(context);
                           },
                           child: Text(
                             'Contactar soporte',

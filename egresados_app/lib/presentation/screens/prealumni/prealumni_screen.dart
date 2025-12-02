@@ -124,8 +124,8 @@ class _PreAlumniScreenState extends State<PreAlumniScreen>
                   
                   const SizedBox(height: AppConstants.paddingLarge),
                   
-                  // Progreso general
-                  _buildProgressCard(egresado),
+                  // Progreso general (Stepper)
+                  _buildStepperProgress(egresado),
                 ],
               ),
             ),
@@ -311,11 +311,23 @@ class _PreAlumniScreenState extends State<PreAlumniScreen>
     );
   }
 
-  Widget _buildProgressCard(egresado) {
+  Widget _buildStepperProgress(EgresadoModel egresado) {
+    // Determinar el paso actual
+    int currentStep = 1; // 1: Perfil, 2: Documentos, 3: Autoevaluación
+    
+    if (egresado.autoevaluacionCompletada) {
+      currentStep = 4; // Todo completado
+    } else if (egresado.autoevaluacionHabilitada) {
+      currentStep = 3; // En autoevaluación
+    } else {
+      currentStep = 2; // En documentos (Perfil siempre está listo aquí)
+    }
+
     return Card(
       elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(AppConstants.paddingLarge),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -323,26 +335,35 @@ class _PreAlumniScreenState extends State<PreAlumniScreen>
               'Tu Progreso',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
             ),
-            
-            const SizedBox(height: AppConstants.paddingMedium),
-            
-            _buildProgressItem(
-              title: 'Perfil completado',
-              isCompleted: true,
-            ),
-            
-            _buildProgressItem(
-              title: 'Documentos subidos',
-              isCompleted: egresado.autoevaluacionHabilitada,
-            ),
-            
-            _buildProgressItem(
-              title: 'Autoevaluación completada',
-              isCompleted: egresado.autoevaluacionCompletada,
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                _buildStep(
+                  stepNumber: 1,
+                  title: 'Perfil',
+                  isActive: currentStep >= 1,
+                  isCompleted: currentStep > 1,
+                  isLast: false,
+                ),
+                _buildStep(
+                  stepNumber: 2,
+                  title: 'Docs',
+                  isActive: currentStep >= 2,
+                  isCompleted: currentStep > 2,
+                  isLast: false,
+                ),
+                _buildStep(
+                  stepNumber: 3,
+                  title: 'Auto-\nevaluación',
+                  isActive: currentStep >= 3,
+                  isCompleted: currentStep > 3,
+                  isLast: true,
+                ),
+              ],
             ),
           ],
         ),
@@ -350,27 +371,98 @@ class _PreAlumniScreenState extends State<PreAlumniScreen>
     );
   }
 
-  Widget _buildProgressItem({
+  Widget _buildStep({
+    required int stepNumber,
     required String title,
+    required bool isActive,
     required bool isCompleted,
+    required bool isLast,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppConstants.paddingSmall),
+    return Expanded(
       child: Row(
         children: [
-          Icon(
-            isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: isCompleted ? AppColors.success : AppColors.textSecondary,
-            size: 20,
-          ),
-          const SizedBox(width: AppConstants.paddingSmall),
-          Text(
-            title,
-            style: TextStyle(
-              color: isCompleted ? AppColors.textPrimary : AppColors.textSecondary,
-              fontWeight: isCompleted ? FontWeight.w500 : FontWeight.normal,
+          Expanded(
+            child: Column(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isCompleted || isActive
+                        ? AppColors.primary
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: isCompleted || isActive
+                          ? AppColors.primary
+                          : AppColors.textSecondary.withOpacity(0.3),
+                      width: 2,
+                    ),
+                    boxShadow: isActive && !isCompleted
+                        ? [
+                            BoxShadow(
+                              color: AppColors.primary.withOpacity(0.3),
+                              blurRadius: 8,
+                              spreadRadius: 2,
+                            )
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: isCompleted
+                        ? const Icon(
+                            Icons.check,
+                            size: 18,
+                            color: Colors.white,
+                          )
+                        : Text(
+                            '$stepNumber',
+                            style: TextStyle(
+                              color: isActive
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    color: isActive
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+                if (isActive && !isCompleted)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Container(
+                      width: 20,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
+          if (!isLast)
+            Expanded(
+              child: Container(
+                height: 2,
+                color: isCompleted
+                    ? AppColors.primary
+                    : AppColors.textSecondary.withOpacity(0.2),
+                margin: const EdgeInsets.only(bottom: 20), // Ajuste visual para alinear con círculos
+              ),
+            ),
         ],
       ),
     );

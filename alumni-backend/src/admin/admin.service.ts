@@ -10,9 +10,12 @@ import { FiltrosEgresadosDto } from './dto/filtros-egresados.dto';
 import { SearchEgresadosDto } from './dto/search-egresados.dto';
 import { CreatePreguntaDto, UpdatePreguntaDto } from './dto/pregunta.dto';
 import { CreateModuloDto, UpdateModuloDto } from './dto/modulo.dto';
+import { CreateCarreraDto, UpdateCarreraDto } from './dto/carrera.dto';
+import { CreateGradoAcademicoDto, UpdateGradoAcademicoDto } from './dto/grado-academico.dto';
 import { DashboardStats } from './interfaces/dashboard-stats.interface';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 
@@ -24,6 +27,7 @@ export class AdminService {
     private readonly supabaseService: SupabaseService,
     private readonly notificacionesService: NotificacionesService,
     private readonly mailService: MailService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   /**
@@ -751,6 +755,21 @@ export class AdminService {
       } catch (err) {
         this.logger.error(`Failed to send email: ${err.message}`);
         // Don't throw - email is not critical
+      }
+
+      // Send push notification if user has FCM token (best-effort)
+      if (data.fcm_token) {
+        try {
+          const nombreCompleto = `${data.nombre} ${data.apellido}`;
+          await this.notificationsService.sendHabilitacionNotification(
+            data.fcm_token,
+            nombreCompleto,
+          );
+          this.logger.log(`Push notification sent to ${data.correo}`);
+        } catch (err) {
+          this.logger.error(`Failed to send push notification: ${err.message}`);
+          // Don't throw - push notification is not critical
+        }
       }
     }
 
@@ -1676,11 +1695,12 @@ export class AdminService {
 
   // ==================== CRUD DE CARRERAS ====================
 
+
   async getCarreras(activa?: boolean) {
-    const client = this.supabaseService.getClient();
-    let query = client
+    let query = this.supabaseService
+      .getClient()
       .from('carreras')
-      .select('*')
+      .select('*, grados_academicos(nombre)')
       .order('nombre', { ascending: true });
 
     if (activa !== undefined) {
@@ -1690,106 +1710,89 @@ export class AdminService {
     const { data, error } = await query;
 
     if (error) {
-      this.logger.error(`Error getting carreras: ${error.message}`);
-      throw new Error(`Error al obtener carreras: ${error.message}`);
+      this.logger.error(`Error fetching careers: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener carreras');
     }
 
     return data;
   }
 
   async getCarrera(id: string) {
-    const client = this.supabaseService.getClient();
-    const { data, error } = await client
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('carreras')
-      .select('*')
+      .select('*, grados_academicos(nombre)')
       .eq('id', id)
       .single();
 
-    if (error) {
-      this.logger.error(`Error getting carrera: ${error.message}`);
-      throw new Error(`Error al obtener carrera: ${error.message}`);
+    if (error || !data) {
+      throw new NotFoundException('Carrera no encontrada');
     }
 
     return data;
   }
 
-  async createCarrera(dto: any) {
-    const client = this.supabaseService.getClient();
-    const { data, error } = await client
+  async createCarrera(dto: CreateCarreraDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('carreras')
       .insert({
-        nombre: dto.nombre,
-        codigo: dto.codigo,
-        activa: dto.activa !== undefined ? dto.activa : true,
+        ...dto,
+        activa: dto.activa ?? true,
       })
       .select()
       .single();
 
     if (error) {
-      this.logger.error(`Error creating carrera: ${error.message}`);
-      throw new Error(`Error al crear carrera: ${error.message}`);
+      this.logger.error(`Error creating career: ${error.message}`);
+      throw new InternalServerErrorException('Error al crear carrera');
     }
 
+    this.logger.log(`Carrera creada: ${data.id}`);
     return data;
   }
 
-  async updateCarrera(id: string, dto: any) {
-    const client = this.supabaseService.getClient();
-    const updateData: any = {};
-
-    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
-    if (dto.codigo !== undefined) updateData.codigo = dto.codigo;
-    if (dto.activa !== undefined) updateData.activa = dto.activa;
-
-    const { data, error } = await client
+  async updateCarrera(id: string, dto: UpdateCarreraDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('carreras')
-      .update(updateData)
+      .update(dto)
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      this.logger.error(`Error updating carrera: ${error.message}`);
-      throw new Error(`Error al actualizar carrera: ${error.message}`);
+    if (error || !data) {
+      throw new NotFoundException('Carrera no encontrada');
     }
 
+    this.logger.log(`Carrera actualizada: ${id}`);
     return data;
   }
 
   async toggleCarrera(id: string) {
-    const client = this.supabaseService.getClient();
+    const carrera = await this.getCarrera(id);
 
-    const { data: current, error: getError } = await client
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('carreras')
-      .select('activa')
-      .eq('id', id)
-      .single();
-
-    if (getError) {
-      this.logger.error(`Error getting carrera: ${getError.message}`);
-      throw new Error(`Error al obtener carrera: ${getError.message}`);
-    }
-
-    const { data, error } = await client
-      .from('carreras')
-      .update({ activa: !current.activa })
+      .update({ activa: !carrera.activa })
       .eq('id', id)
       .select()
       .single();
 
     if (error) {
-      this.logger.error(`Error toggling carrera: ${error.message}`);
-      throw new Error(`Error al cambiar estado de carrera: ${error.message}`);
+      throw new InternalServerErrorException('Error al actualizar carrera');
     }
 
+    this.logger.log(`Carrera ${data.activa ? 'activada' : 'desactivada'}: ${id}`);
     return data;
   }
 
   // ==================== CRUD DE GRADOS ACADÉMICOS ====================
 
   async getGradosAcademicos(activo?: boolean) {
-    const client = this.supabaseService.getClient();
-    let query = client
+    let query = this.supabaseService
+      .getClient()
       .from('grados_academicos')
       .select('*')
       .order('nivel', { ascending: true });
@@ -1801,103 +1804,83 @@ export class AdminService {
     const { data, error } = await query;
 
     if (error) {
-      this.logger.error(`Error getting grados academicos: ${error.message}`);
-      throw new Error(`Error al obtener grados académicos: ${error.message}`);
+      this.logger.error(`Error fetching academic degrees: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener grados académicos');
     }
 
     return data;
   }
 
   async getGradoAcademico(id: string) {
-    const client = this.supabaseService.getClient();
-    const { data, error } = await client
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('grados_academicos')
       .select('*')
       .eq('id', id)
       .single();
 
-    if (error) {
-      this.logger.error(`Error getting grado academico: ${error.message}`);
-      throw new Error(`Error al obtener grado académico: ${error.message}`);
+    if (error || !data) {
+      throw new NotFoundException('Grado académico no encontrado');
     }
 
     return data;
   }
 
-  async createGradoAcademico(dto: any) {
-    const client = this.supabaseService.getClient();
-    const { data, error } = await client
+  async createGradoAcademico(dto: CreateGradoAcademicoDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('grados_academicos')
       .insert({
-        nombre: dto.nombre,
-        codigo: dto.codigo,
-        nivel: dto.nivel,
-        activo: dto.activo !== undefined ? dto.activo : true,
+        ...dto,
+        activo: dto.activo ?? true,
       })
       .select()
       .single();
 
     if (error) {
-      this.logger.error(`Error creating grado academico: ${error.message}`);
-      throw new Error(`Error al crear grado académico: ${error.message}`);
+      this.logger.error(`Error creating academic degree: ${error.message}`);
+      throw new InternalServerErrorException('Error al crear grado académico');
     }
 
+    this.logger.log(`Grado académico creado: ${data.id}`);
     return data;
   }
 
-  async updateGradoAcademico(id: string, dto: any) {
-    const client = this.supabaseService.getClient();
-    const updateData: any = {};
-
-    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
-    if (dto.codigo !== undefined) updateData.codigo = dto.codigo;
-    if (dto.nivel !== undefined) updateData.nivel = dto.nivel;
-    if (dto.activo !== undefined) updateData.activo = dto.activo;
-
-    const { data, error } = await client
+  async updateGradoAcademico(id: string, dto: UpdateGradoAcademicoDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('grados_academicos')
-      .update(updateData)
+      .update(dto)
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      this.logger.error(`Error updating grado academico: ${error.message}`);
-      throw new Error(`Error al actualizar grado académico: ${error.message}`);
+    if (error || !data) {
+      throw new NotFoundException('Grado académico no encontrado');
     }
 
+    this.logger.log(`Grado académico actualizado: ${id}`);
     return data;
   }
 
   async toggleGradoAcademico(id: string) {
-    const client = this.supabaseService.getClient();
+    const grado = await this.getGradoAcademico(id);
 
-    const { data: current, error: getError } = await client
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('grados_academicos')
-      .select('activo')
-      .eq('id', id)
-      .single();
-
-    if (getError) {
-      this.logger.error(`Error getting grado academico: ${getError.message}`);
-      throw new Error(`Error al obtener grado académico: ${getError.message}`);
-    }
-
-    const { data, error } = await client
-      .from('grados_academicos')
-      .update({ activo: !current.activo })
+      .update({ activo: !grado.activo })
       .eq('id', id)
       .select()
       .single();
 
     if (error) {
-      this.logger.error(`Error toggling grado academico: ${error.message}`);
-      throw new Error(`Error al cambiar estado de grado académico: ${error.message}`);
+      throw new InternalServerErrorException('Error al actualizar grado académico');
     }
 
+    this.logger.log(`Grado académico ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
     return data;
   }
-
 
   /**
    * Send invitations from Excel file
@@ -1972,5 +1955,4 @@ export class AdminService {
       throw new BadRequestException(`Error al procesar invitaciones: ${error.message}`);
     }
   }
-
 }

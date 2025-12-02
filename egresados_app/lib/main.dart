@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -24,6 +26,13 @@ import 'presentation/screens/profile/complete_profile_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
 import 'presentation/widgets/loading_widget.dart';
 
+// Manejador de notificaciones en background (debe estar fuera de main)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('📬 Notificación en background: ${message.notification?.title}');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -35,6 +44,12 @@ void main() async {
     // Modo producción
     AppConfig.initialize(ProductionEnvironment());
   }
+
+  // Inicializar Firebase
+  await Firebase.initializeApp();
+  
+  // Configurar manejador de notificaciones en background
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // Inicializar Supabase con configuración dinámica
   await Supabase.initialize(
@@ -89,6 +104,7 @@ class _AlumniAppState extends State<AlumniApp> {
           data.event == AuthChangeEvent.tokenRefreshed) {
         print('🔥 Deep link auth successful: ${data.session?.user?.email}');
         _authBloc.add(AuthInitialized());
+        _authService.initializeNotifications();
       }
     });
 
@@ -141,6 +157,7 @@ class _AlumniAppState extends State<AlumniApp> {
       if (session != null) {
         print('🔗 Session already exists: ${session.user.email}');
         _authBloc.add(AuthInitialized());
+        _authService.initializeNotifications();
       } else {
         print('🔗 No session found, waiting for deep link...');
       }
@@ -239,13 +256,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return BlocListener<AuthBloc, auth.AuthState>(
       listener: (context, state) {
         print('🎧 AuthWrapper BlocListener: ${state.runtimeType}');
-        // Forzar reconstrucción cuando cambia a AuthUnauthenticated
-        if (state is auth.AuthUnauthenticated) {
-          print('🔄 AuthWrapper: Forzando reconstrucción por AuthUnauthenticated');
-          setState(() {
-            _showOnboarding = false; // Ir directo al login
-          });
-        }
+        // No forzar cambio de onboarding aquí
       },
       child: BlocBuilder<AuthBloc, auth.AuthState>(
         buildWhen: (previous, current) {
@@ -283,7 +294,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const CompleteProfileScreen();
         }
 
-        // Si hay error, mostrar onboarding
+        // Si hay error al completar perfil, mantener en la pantalla de perfil
+        if (state is auth.AuthProfileCompletionFailure) {
+          return const CompleteProfileScreen();
+        }
+
+        // Si hay error, mostrar onboarding primero si aplica
         if (state is auth.AuthError) {
           if (_showOnboarding) {
             return OnboardingScreen(
@@ -297,9 +313,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const LoginScreen();
         }
 
-        // Si no está autenticado, ir directo al login (sin onboarding)
+        // Si no está autenticado, mostrar onboarding primero si aplica
         if (state is auth.AuthUnauthenticated) {
-          print('🔓 AuthWrapper: Usuario no autenticado, mostrando LoginScreen');
+          print('🔓 AuthWrapper: Usuario no autenticado');
+          if (_showOnboarding) {
+            print('🎬 AuthWrapper: Mostrando OnboardingScreen');
+            return OnboardingScreen(
+              onComplete: () {
+                setState(() {
+                  _showOnboarding = false;
+                });
+              },
+            );
+          }
+          print('🔓 AuthWrapper: Mostrando LoginScreen');
           return const LoginScreen();
         }
 

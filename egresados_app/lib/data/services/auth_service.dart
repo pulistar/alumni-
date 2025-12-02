@@ -2,10 +2,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dio/dio.dart';
 import '../models/user_model.dart';
 import '../../core/config/api_config.dart';
+import '../../services/notification_service.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final Dio _dio = Dio();
+  final NotificationService _notificationService = NotificationService();
 
   // Constructor
   AuthService() {
@@ -82,13 +84,63 @@ class AuthService {
     required String token,
   }) async {
     try {
-      return await _supabase.auth.verifyOTP(
+      final response = await _supabase.auth.verifyOTP(
         type: OtpType.email,
         email: email,
         token: token,
       );
+
+      if (response.session != null) {
+        await initializeNotifications();
+      }
+
+      return response;
     } catch (e) {
       throw Exception('Error verificando OTP: $e');
+    }
+  }
+
+  // Inicializar notificaciones y actualizar token
+  Future<void> initializeNotifications() async {
+    try {
+      await _notificationService.initialize();
+      final token = await _notificationService.getToken();
+      if (token != null) {
+        await _updateFcmToken(token);
+      }
+    } catch (e) {
+      print('❌ Error inicializando notificaciones en AuthService: $e');
+    }
+  }
+
+  // Actualizar token FCM en backend
+  Future<void> _updateFcmToken(String fcmToken) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      // Actualizar directamente en Supabase o a través de tu API si prefieres
+      // Usando Supabase directo ya que tenemos RLS configurado
+      await _supabase
+          .from('egresados')
+          .update({'fcm_token': fcmToken})
+          .eq('id', userId); // Asumiendo que el ID del egresado es el mismo que el user_id
+          
+      print('✅ FCM Token actualizado en el backend');
+    } catch (e) {
+      print('❌ Error actualizando FCM token: $e');
+      // Intentar buscar el egresado por user_id si falla por id
+      try {
+         final userId = _supabase.auth.currentUser?.id;
+         if (userId != null) {
+            await _supabase
+            .from('egresados')
+            .update({'fcm_token': fcmToken})
+            .eq('user_id', userId);
+         }
+      } catch (e2) {
+         print('❌ Error re-intentando actualizar FCM token: $e2');
+      }
     }
   }
 
@@ -115,18 +167,14 @@ class AuthService {
     required String nombre,
     required String apellido,
     required String idUniversitario,
-    required String telefono,
-    required String ciudad,
-    String? carreraId,
+    required String celular,
     String? telefonoAlternativo,
-    String? direccion,
-    String? pais,
-    String? estadoLaboralId,
-    String? empresaActual,
-    String? cargoActual,
-    String? fechaGraduacion,
-    String? semestreGraduacion,
-    int? anioGraduacion,
+    required String correoPersonal,
+    required String tipoDocumentoId,
+    required String documento,
+    required String lugarExpedicion,
+    required String gradoAcademicoId,
+    required String carreraId,
   }) async {
     try {
       final response = await _dio.post(
@@ -136,17 +184,13 @@ class AuthService {
           'apellido': apellido,
           'id_universitario': idUniversitario,
           'carrera_id': carreraId,
-          'telefono': telefono,
+          'celular': celular,
           'telefono_alternativo': telefonoAlternativo,
-          'direccion': direccion,
-          'ciudad': ciudad,
-          'pais': pais ?? 'Colombia',
-          'estado_laboral_id': estadoLaboralId,
-          'empresa_actual': empresaActual,
-          'cargo_actual': cargoActual,
-          'fecha_graduacion': fechaGraduacion,
-          'semestre_graduacion': semestreGraduacion,
-          'anio_graduacion': anioGraduacion,
+          'correo_personal': correoPersonal,
+          'tipo_documento_id': tipoDocumentoId,
+          'documento': documento,
+          'lugar_expedicion': lugarExpedicion,
+          'grado_academico_id': gradoAcademicoId,
         },
       );
 
@@ -164,23 +208,21 @@ class AuthService {
   Future<EgresadoModel> updateProfile({
     String? nombre,
     String? apellido,
+    String? celular,
+    String? telefonoAlternativo,
+    String? correoPersonal,
     String? carreraId,
-    String? telefono,
-    String? ciudad,
-    String? estadoLaboralId,
-    String? empresaActual,
-    String? cargoActual,
+    String? gradoAcademicoId,
   }) async {
     try {
       final data = <String, dynamic>{};
       if (nombre != null) data['nombre'] = nombre;
       if (apellido != null) data['apellido'] = apellido;
+      if (celular != null) data['celular'] = celular;
+      if (telefonoAlternativo != null) data['telefono_alternativo'] = telefonoAlternativo;
+      if (correoPersonal != null) data['correo_personal'] = correoPersonal;
       if (carreraId != null) data['carrera_id'] = carreraId;
-      if (telefono != null) data['telefono'] = telefono;
-      if (ciudad != null) data['ciudad'] = ciudad;
-      if (estadoLaboralId != null) data['estado_laboral_id'] = estadoLaboralId;
-      if (empresaActual != null) data['empresa_actual'] = empresaActual;
-      if (cargoActual != null) data['cargo_actual'] = cargoActual;
+      if (gradoAcademicoId != null) data['grado_academico_id'] = gradoAcademicoId;
 
       final response = await _dio.patch(
         ApiConfig.egresados + '/me',
@@ -246,6 +288,40 @@ class AuthService {
       }
     } on DioException catch (e) {
       throw Exception('Error obteniendo estados laborales: ${e.response?.data ?? e.message}');
+    }
+  }
+
+  // Obtener lista de grados académicos
+  Future<List<Map<String, dynamic>>> getGradosAcademicos() async {
+    try {
+      final response = await _dio.get(
+        ApiConfig.egresados + '/grados-academicos',
+      );
+
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(response.data);
+      } else {
+        throw Exception('Error del servidor: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Error obteniendo grados académicos: ${e.response?.data ?? e.message}');
+    }
+  }
+
+  // Obtener lista de tipos de documento
+  Future<List<Map<String, dynamic>>> getTiposDocumento() async {
+    try {
+      final response = await _dio.get(
+        ApiConfig.egresados + '/tipos-documento',
+      );
+
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(response.data);
+      } else {
+        throw Exception('Error del servidor: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Error obteniendo tipos de documento: ${e.response?.data ?? e.message}');
     }
   }
 }

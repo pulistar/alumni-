@@ -39,35 +39,27 @@ class AuthProfileCompleted extends AuthEvent {
   final String nombre;
   final String apellido;
   final String idUniversitario;
-  final String telefono;
-  final String ciudad;
-  final String? carreraId;
+  final String celular;
   final String? telefonoAlternativo;
-  final String? direccion;
-  final String? pais;
-  final String? estadoLaboralId;
-  final String? empresaActual;
-  final String? cargoActual;
-  final String? fechaGraduacion;
-  final String? semestreGraduacion;
-  final int? anioGraduacion;
+  final String correoPersonal;
+  final String tipoDocumentoId;
+  final String documento;
+  final String lugarExpedicion;
+  final String gradoAcademicoId;
+  final String carreraId;
 
   const AuthProfileCompleted({
     required this.nombre,
     required this.apellido,
     required this.idUniversitario,
-    required this.telefono,
-    required this.ciudad,
-    this.carreraId,
+    required this.celular,
     this.telefonoAlternativo,
-    this.direccion,
-    this.pais,
-    this.estadoLaboralId,
-    this.empresaActual,
-    this.cargoActual,
-    this.fechaGraduacion,
-    this.semestreGraduacion,
-    this.anioGraduacion,
+    required this.correoPersonal,
+    required this.tipoDocumentoId,
+    required this.documento,
+    required this.lugarExpedicion,
+    required this.gradoAcademicoId,
+    required this.carreraId,
   });
 
   @override
@@ -75,18 +67,14 @@ class AuthProfileCompleted extends AuthEvent {
         nombre,
         apellido,
         idUniversitario,
-        telefono,
-        ciudad,
-        carreraId,
+        celular,
         telefonoAlternativo,
-        direccion,
-        pais,
-        estadoLaboralId,
-        empresaActual,
-        cargoActual,
-        fechaGraduacion,
-        semestreGraduacion,
-        anioGraduacion,
+        correoPersonal,
+        tipoDocumentoId,
+        documento,
+        lugarExpedicion,
+        gradoAcademicoId,
+        carreraId,
       ];
 }
 

@@ -1,9 +1,11 @@
 // Constantes de la aplicación
 class AppConstants {
   // Información de la app
-  static const String appName = 'Alumni UCC';
+  static const String appName = 'Alumni';
   static const String appVersion = '1.0.0';
   static const String universityName = 'Universidad Cooperativa de Colombia';
+  static const String supportPhone = '+573234427114';
+  static const String supportEmail = 'jhon.ortizpa@campusucc.edu.co';
   
   // Tamaños
   static const double paddingSmall = 8.0;

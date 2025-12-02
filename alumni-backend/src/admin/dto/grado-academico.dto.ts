@@ -1,59 +1,27 @@
-import { IsString, IsInt, IsBoolean, IsOptional, MaxLength, Min, Max, IsNotEmpty } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
 
 export class CreateGradoAcademicoDto {
-    @ApiProperty({ description: 'Nombre del grado académico', example: 'Pregrado' })
+    @ApiProperty({ description: 'Nombre del grado académico (ej: Pregrado, Maestría)' })
     @IsString()
-    @MaxLength(100)
     @IsNotEmpty()
     nombre: string;
 
-    @ApiPropertyOptional({ description: 'Código del grado', example: 'PREG' })
+    @ApiProperty({ description: 'Código del grado académico (ej: PREG, MAES)' })
     @IsString()
-    @MaxLength(20)
     @IsNotEmpty()
     codigo: string;
 
-    @ApiPropertyOptional({
-        description: 'Nivel jerárquico del grado (1-7)',
-        example: 4,
-        minimum: 0,
-        maximum: 7
-    })
+    @ApiProperty({ description: 'Nivel jerárquico (1=Auxiliar, 4=Pregrado, 6=Maestría, etc.)' })
     @IsInt()
     @Min(0)
-    @Max(7)
     @IsNotEmpty()
     nivel: number;
 
-    @ApiPropertyOptional({ description: 'Si el grado está activo', example: true, default: true })
+    @ApiProperty({ description: 'Indica si el grado académico está activo', default: true })
     @IsBoolean()
-    @IsNotEmpty()
-    activo: boolean;
+    @IsOptional()
+    activo?: boolean;
 }
 
-export class UpdateGradoAcademicoDto {
-    @ApiPropertyOptional({ description: 'Nombre del grado académico' })
-    @IsString()
-    @MaxLength(100)
-    @IsNotEmpty()
-    nombre: string;
-
-    @ApiPropertyOptional({ description: 'Código del grado' })
-    @IsString()
-    @MaxLength(20)
-    @IsNotEmpty()
-    codigo: string;
-
-    @ApiPropertyOptional({ description: 'Nivel jerárquico del grado (1-7)' })
-    @IsInt()
-    @Min(0)
-    @Max(7)
-    @IsNotEmpty()
-    nivel: number;
-
-    @ApiPropertyOptional({ description: 'Si el grado está activo' })
-    @IsBoolean()
-    @IsNotEmpty()
-    activo: boolean;
-}
+export class UpdateGradoAcademicoDto extends PartialType(CreateGradoAcademicoDto) { }
