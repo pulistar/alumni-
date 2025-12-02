@@ -41,3 +41,22 @@ build/
 # Firebase credentials (NEVER commit these!)
 config/firebase-admin-key.json
 firebase-admin-key.json
+
+# Archivos temporales de desarrollo
+*.log
+*.txt
+build_log.txt
+temp_*.txt
+*_snippet.txt
+
+# Scripts de prueba
+test-*.ps1
+test_*.js
+test-*.pdf
+
+# Scripts temporales
+fix_*.js
+update_*.js
+analyze_*.js
+restore_*.js
+read_*.js
