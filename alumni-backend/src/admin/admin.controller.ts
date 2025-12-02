@@ -122,6 +122,13 @@ export class AdminController {
     return this.adminService.getRadarCompetencias();
   }
 
+  @Get('analytics/competencias-carrera')
+  @ApiOperation({ summary: 'Obtener competencias por carrera' })
+  @ApiResponse({ status: 200, description: 'Competencias agrupadas por carrera' })
+  async getCompetenciasPorCarrera() {
+    return this.adminService.getCompetenciasPorCarrera();
+  }
+
   @Patch('egresados/:id/habilitar')
   @ApiOperation({ summary: 'Habilitar/deshabilitar egresado' })
   @ApiResponse({ status: 200, description: 'Egresado actualizado' })

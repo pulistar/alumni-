@@ -78,7 +78,7 @@ export class AuthService {
    * @returns AuthResponseDto with JWT token
    */
   async register(registerDto: any): Promise<AuthResponseDto> {
-    const { correo_institucional, nombre, apellido, password, confirmPassword } = registerDto;
+    const { correo, nombre, apellido, password, confirmPassword } = registerDto;
 
     // 1. Validate passwords match
     if (password !== confirmPassword) {
@@ -90,7 +90,7 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .select('id')
-      .eq('correo', correo_institucional)
+      .eq('correo', correo)
       .single();
 
     if (existingAdmin) {
@@ -106,7 +106,7 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .insert({
-        correo: correo_institucional,
+        correo,
         nombre,
         apellido,
         password_hash: passwordHash,
@@ -130,7 +130,7 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload);
 
-    this.logger.log(`New admin registered: ${correo_institucional}`);
+    this.logger.log(`New admin registered: ${correo}`);
 
     return {
       accessToken,
