@@ -54,6 +54,7 @@ jobs:
           apply plugin: 'com.android.library'
           
           android {
+              namespace 'com.llfbandit.app_links'
               compileSdk 34
               
               defaultConfig {
