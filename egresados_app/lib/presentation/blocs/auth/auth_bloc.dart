@@ -145,18 +145,14 @@ class AuthBloc extends Bloc<AuthEvent, auth.AuthState> {
         nombre: event.nombre,
         apellido: event.apellido,
         idUniversitario: event.idUniversitario,
-        telefono: event.telefono,
-        ciudad: event.ciudad,
-        carreraId: event.carreraId,
+        celular: event.celular,
         telefonoAlternativo: event.telefonoAlternativo,
-        direccion: event.direccion,
-        pais: event.pais,
-        estadoLaboralId: event.estadoLaboralId,
-        empresaActual: event.empresaActual,
-        cargoActual: event.cargoActual,
-        fechaGraduacion: event.fechaGraduacion,
-        semestreGraduacion: event.semestreGraduacion,
-        anioGraduacion: event.anioGraduacion,
+        correoPersonal: event.correoPersonal,
+        tipoDocumentoId: event.tipoDocumentoId,
+        documento: event.documento,
+        lugarExpedicion: event.lugarExpedicion,
+        gradoAcademicoId: event.gradoAcademicoId,
+        carreraId: event.carreraId,
       );
 
       emit(auth.AuthenticatedWithProfile(
@@ -164,7 +160,10 @@ class AuthBloc extends Bloc<AuthEvent, auth.AuthState> {
         egresado: egresado,
       ));
     } catch (e) {
-      emit(auth.AuthError(message: e.toString()));
+      emit(auth.AuthProfileCompletionFailure(
+        user: currentState.user,
+        message: e.toString(),
+      ));
     }
   }
 

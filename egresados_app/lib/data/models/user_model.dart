@@ -59,15 +59,18 @@ class UserModel extends Equatable {
 class EgresadoModel extends Equatable {
   final String id;
   final String uid;
-  final String correo;
+  final String correoInstitucional;
   final String nombre;
   final String apellido;
-  final String? carreraId;
-  final String? telefono;
-  final String? ciudad;
-  final String? estadoLaboralId;
-  final String? empresaActual;
-  final String? cargoActual;
+  final String idUniversitario;
+  final String carreraId;
+  final String celular;
+  final String? telefonoAlternativo;
+  final String correoPersonal;
+  final String tipoDocumentoId;
+  final String documento;
+  final String lugarExpedicion;
+  final String gradoAcademicoId;
   final bool habilitado;
   final bool procesoGradoCompleto;
   final bool autoevaluacionHabilitada;
@@ -78,15 +81,18 @@ class EgresadoModel extends Equatable {
   const EgresadoModel({
     required this.id,
     required this.uid,
-    required this.correo,
+    required this.correoInstitucional,
     required this.nombre,
     required this.apellido,
-    this.carreraId,
-    this.telefono,
-    this.ciudad,
-    this.estadoLaboralId,
-    this.empresaActual,
-    this.cargoActual,
+    required this.idUniversitario,
+    required this.carreraId,
+    required this.celular,
+    this.telefonoAlternativo,
+    required this.correoPersonal,
+    required this.tipoDocumentoId,
+    required this.documento,
+    required this.lugarExpedicion,
+    required this.gradoAcademicoId,
     required this.habilitado,
     required this.procesoGradoCompleto,
     required this.autoevaluacionHabilitada,
@@ -99,15 +105,18 @@ class EgresadoModel extends Equatable {
     return EgresadoModel(
       id: json['id'] as String,
       uid: json['uid'] as String,
-      correo: json['correo'] as String,
+      correoInstitucional: json['correo_institucional'] as String,
       nombre: json['nombre'] as String,
       apellido: json['apellido'] as String,
-      carreraId: json['carrera_id'] as String?,
-      telefono: json['telefono'] as String?,
-      ciudad: json['ciudad'] as String?,
-      estadoLaboralId: json['estado_laboral_id'] as String?,
-      empresaActual: json['empresa_actual'] as String?,
-      cargoActual: json['cargo_actual'] as String?,
+      idUniversitario: json['id_universitario'] as String,
+      carreraId: json['carrera_id'] as String,
+      celular: json['celular'] as String,
+      telefonoAlternativo: json['telefono_alternativo'] as String?,
+      correoPersonal: json['correo_personal'] as String,
+      tipoDocumentoId: json['tipo_documento_id'] as String,
+      documento: json['documento'] as String,
+      lugarExpedicion: json['lugar_expedicion'] as String,
+      gradoAcademicoId: json['grado_academico_id'] as String,
       habilitado: json['habilitado'] as bool? ?? false,
       procesoGradoCompleto: json['proceso_grado_completo'] as bool? ?? false,
       autoevaluacionHabilitada: json['autoevaluacion_habilitada'] as bool? ?? false,
@@ -121,14 +130,26 @@ class EgresadoModel extends Equatable {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
+      'uid': uid,
+      'correo_institucional': correoInstitucional,
       'nombre': nombre,
       'apellido': apellido,
+      'id_universitario': idUniversitario,
       'carrera_id': carreraId,
-      'telefono': telefono,
-      'ciudad': ciudad,
-      'estado_laboral_id': estadoLaboralId,
-      'empresa_actual': empresaActual,
-      'cargo_actual': cargoActual,
+      'celular': celular,
+      'telefono_alternativo': telefonoAlternativo,
+      'correo_personal': correoPersonal,
+      'tipo_documento_id': tipoDocumentoId,
+      'documento': documento,
+      'lugar_expedicion': lugarExpedicion,
+      'grado_academico_id': gradoAcademicoId,
+      'habilitado': habilitado,
+      'proceso_grado_completo': procesoGradoCompleto,
+      'autoevaluacion_habilitada': autoevaluacionHabilitada,
+      'autoevaluacion_completada': autoevaluacionCompletada,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
@@ -138,15 +159,18 @@ class EgresadoModel extends Equatable {
   List<Object?> get props => [
         id,
         uid,
-        correo,
+        correoInstitucional,
         nombre,
         apellido,
+        idUniversitario,
         carreraId,
-        telefono,
-        ciudad,
-        estadoLaboralId,
-        empresaActual,
-        cargoActual,
+        celular,
+        telefonoAlternativo,
+        correoPersonal,
+        tipoDocumentoId,
+        documento,
+        lugarExpedicion,
+        gradoAcademicoId,
         habilitado,
         procesoGradoCompleto,
         autoevaluacionHabilitada,

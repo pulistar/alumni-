@@ -282,7 +282,7 @@ export class DocumentosService {
         .from('documentos_egresado')
         .insert({
           egresado_id: egresadoId,
-          tipo_documento: 'otro',
+          tipo_documento: 'unificado',
           nombre_archivo: displayName,
           ruta_storage: storagePath,
           tamano_bytes: pdfBytes.length,
@@ -498,27 +498,216 @@ export class DocumentosService {
 
   /**
    * Get unified PDF for egresado
+   * Generates it on-demand if it doesn't exist
    */
   async getUnifiedPDF(egresadoId: string) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('documentos_egresado')
-      .select('*')
-      .eq('egresado_id', egresadoId)
-      .eq('es_unificado', true)
-      .is('deleted_at', null)
-      .single();
+    try {
+      this.logger.log(`🔍 Getting unified PDF for egresado: ${egresadoId}`);
 
-    if (error || !data) {
-      throw new NotFoundException('PDF unificado no encontrado');
+      // Try to find existing unified PDF
+      const { data: existingPdf, error } = await this.supabaseService
+        .getClient()
+        .from('documentos_egresado')
+        .select('*')
+        .eq('egresado_id', egresadoId)
+        .eq('es_unificado', true)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      // If PDF exists, return it
+      if (existingPdf) {
+        this.logger.log(`✅ Found existing unified PDF for egresado: ${egresadoId}`);
+        const url = await this.getSignedUrlInternal(existingPdf.ruta_storage);
+        return {
+          ...existingPdf,
+          url,
+        };
+      }
+
+      // If PDF doesn't exist, check if we have documents to generate it
+      this.logger.log(`📄 No unified PDF found, checking for documents...`);
+
+      const { data: documents } = await this.supabaseService
+        .getClient()
+        .from('documentos_egresado')
+        .select('*')
+        .eq('egresado_id', egresadoId)
+        .eq('es_unificado', false)
+        .is('deleted_at', null);
+
+      if (!documents || documents.length === 0) {
+        this.logger.warn(`No documents found for egresado: ${egresadoId}`);
+        throw new NotFoundException('No hay documentos para generar el PDF unificado. Sube al menos un documento primero.');
+      }
+
+      this.logger.log(`📄 Found ${documents.length} documents, generating PDF...`);
+
+      // Generate PDF with available documents
+      try {
+        await this.generateUnifiedPDFFromDocs(egresadoId, documents);
+        this.logger.log(`✅ PDF generation completed`);
+      } catch (genError) {
+        this.logger.error(`❌ Error in generateUnifiedPDFFromDocs: ${genError.message}`);
+        this.logger.error(`Stack: ${genError.stack}`);
+        throw new InternalServerErrorException(`Error al generar el PDF: ${genError.message}`);
+      }
+
+      // Fetch the newly generated PDF
+      this.logger.log(`🔍 Fetching newly generated PDF...`);
+      const { data: newPdf, error: fetchError } = await this.supabaseService
+        .getClient()
+        .from('documentos_egresado')
+        .select('*')
+        .eq('egresado_id', egresadoId)
+        .eq('es_unificado', true)
+        .is('deleted_at', null)
+        .single();
+
+      if (fetchError || !newPdf) {
+        this.logger.error(`❌ PDF not found after generation. Error: ${fetchError?.message}`);
+        throw new InternalServerErrorException('El PDF se generó pero no se pudo recuperar');
+      }
+
+      const url = await this.getSignedUrlInternal(newPdf.ruta_storage);
+      this.logger.log(`✅ Successfully generated and retrieved PDF`);
+
+      return {
+        ...newPdf,
+        url,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error in getUnifiedPDF: ${error.message}`);
+      this.logger.error(`Error stack: ${error.stack}`);
+      throw error;
     }
+  }
 
-    const url = await this.getSignedUrlInternal(data.ruta_storage);
+  /**
+   * Generate unified PDF from available documents (flexible version)
+   */
+  private async generateUnifiedPDFFromDocs(egresadoId: string, documents: any[]) {
+    try {
+      this.logger.log(`📄 Generating unified PDF for egresado: ${egresadoId} with ${documents.length} documents`);
 
-    return {
-      ...data,
-      url,
-    };
+      // Get egresado info for cover page and filename
+      const { data: egresado } = await this.supabaseService
+        .getClient()
+        .from('egresados')
+        .select(`
+          nombre, 
+          apellido, 
+          correo,
+          carrera:carreras(nombre)
+        `)
+        .eq('id', egresadoId)
+        .single();
+
+      // Create PDF document
+      const pdfDoc = await PDFDocument.create();
+
+      // Add cover page
+      await this.addCoverPage(pdfDoc, egresado);
+
+      // Sort documents by tipo_documento if they include the required ones
+      const sortedDocs = this.sortDocumentsFlexible(documents);
+      this.logger.log(`📋 Processing ${sortedDocs.length} documents in order:`);
+      sortedDocs.forEach((doc, index) => {
+        this.logger.log(`  ${index + 1}. ${doc.tipo_documento}: ${doc.nombre_archivo}`);
+      });
+
+      // Add each document
+      for (const doc of sortedDocs) {
+        await this.addDocumentToPDF(pdfDoc, doc);
+      }
+
+      // Save PDF
+      const totalPages = pdfDoc.getPageCount();
+      this.logger.log(`📊 Total pages in PDF: ${totalPages}`);
+
+      const pdfBytes = await pdfDoc.save({
+        useObjectStreams: false,
+        addDefaultPage: false,
+        objectsPerTick: Infinity,
+      });
+
+      this.logger.log(`✅ PDF saved successfully, size: ${pdfBytes.length} bytes`);
+
+      // Generate filename
+      const nombreCompleto = `${egresado?.nombre || ''}_${egresado?.apellido || ''}`.trim();
+      const carreraData = egresado?.carrera as any;
+      const nombreCarrera = carreraData?.nombre || 'Carrera';
+
+      const sanitizedNombre = nombreCompleto.replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedCarrera = nombreCarrera.replace(/[^a-zA-Z0-9]/g, '_');
+
+      const timestamp = Date.now();
+      const filename = `Documentos_Grado_${sanitizedNombre}_${sanitizedCarrera}_${timestamp}.pdf`;
+      const displayName = `Documentos de Grado - ${nombreCompleto} - ${nombreCarrera}.pdf`;
+
+      // Upload to storage
+      const uid = documents[0].ruta_storage.split('/')[0];
+      const storagePath = `${uid}/${filename}`;
+
+      const { error: uploadError } = await this.supabaseService
+        .getClient()
+        .storage.from(this.BUCKET_NAME)
+        .upload(storagePath, pdfBytes, {
+          contentType: 'application/pdf',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        this.logger.error(`Error uploading unified PDF: ${uploadError.message}`);
+        throw new InternalServerErrorException('Error al subir el PDF unificado');
+      }
+
+      // Create database record
+      const { error: dbError } = await this.supabaseService
+        .getClient()
+        .from('documentos_egresado')
+        .insert({
+          egresado_id: egresadoId,
+          tipo_documento: 'unificado',
+          nombre_archivo: displayName,
+          ruta_storage: storagePath,
+          tamano_bytes: pdfBytes.length,
+          mime_type: 'application/pdf',
+          es_unificado: true,
+        });
+
+      if (dbError) {
+        this.logger.error(`Error creating unified PDF record: ${dbError.message}`);
+        throw new InternalServerErrorException('Error al guardar el registro del PDF');
+      }
+
+      this.logger.log(`✅ Unified PDF generated successfully: ${filename}`);
+    } catch (error) {
+      this.logger.error(`Error generating unified PDF: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Sort documents flexibly (prioritizes required docs if present)
+   */
+  private sortDocumentsFlexible(documents: any[]) {
+    const preferredOrder = ['momento_ole', 'datos_egresados', 'bolsa_empleo', 'otro'];
+    return documents.sort((a, b) => {
+      const indexA = preferredOrder.indexOf(a.tipo_documento);
+      const indexB = preferredOrder.indexOf(b.tipo_documento);
+
+      // If both are in preferred order, sort by that
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+
+      // Preferred items come first
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+
+      // Otherwise maintain original order
+      return 0;
+    });
   }
 
   /**

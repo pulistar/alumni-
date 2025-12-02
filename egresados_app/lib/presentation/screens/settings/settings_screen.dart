@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../profile/edit_profile_screen.dart';
+import 'about_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -297,26 +299,19 @@ class _SettingsScreenState extends State<SettingsScreen>
             
             const SizedBox(height: AppConstants.paddingMedium),
             
-            _buildSettingItem(
-              icon: Icons.help_outline,
-              title: 'Ayuda y Soporte',
-              subtitle: 'Obtén ayuda y contacta con soporte',
-              onTap: () {
-                _showComingSoon('Ayuda y Soporte');
-              },
-              isEnabled: false,
-            ),
-            
-            const SizedBox(height: AppConstants.paddingSmall),
             
             _buildSettingItem(
               icon: Icons.privacy_tip_outlined,
               title: 'Política de Privacidad',
               subtitle: 'Lee nuestra política de privacidad',
               onTap: () {
-                _showComingSoon('Política de Privacidad');
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const PrivacyPolicyScreen(),
+                  ),
+                );
               },
-              isEnabled: false,
+              isEnabled: true,
             ),
             
             const SizedBox(height: AppConstants.paddingSmall),
@@ -326,9 +321,13 @@ class _SettingsScreenState extends State<SettingsScreen>
               title: 'Acerca de',
               subtitle: 'Información sobre la aplicación',
               onTap: () {
-                _showComingSoon('Acerca de');
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AboutScreen(),
+                  ),
+                );
               },
-              isEnabled: false,
+              isEnabled: true,
             ),
           ],
         ),

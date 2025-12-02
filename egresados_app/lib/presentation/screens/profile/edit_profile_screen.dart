@@ -4,7 +4,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/carreras_service.dart';
-import '../../../data/services/estados_laborales_service.dart';
 import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_event.dart';
 import '../../blocs/auth/auth_state.dart';
@@ -20,23 +19,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
   final CarrerasService _carrerasService = CarrerasService();
-  final EstadosLaboralesService _estadosLaboralesService = EstadosLaboralesService();
   
   // Controllers para los campos
   late TextEditingController _nombreController;
   late TextEditingController _apellidoController;
-  late TextEditingController _telefonoController;
-  late TextEditingController _ciudadController;
-  late TextEditingController _empresaController;
-  late TextEditingController _cargoController;
+  late TextEditingController _celularController;
+  late TextEditingController _telefonoAlternativoController;
+  late TextEditingController _correoPersonalController;
   
   // Datos para dropdowns
   List<Map<String, dynamic>> _carreras = [];
-  List<Map<String, dynamic>> _estadosLaborales = [];
+  List<Map<String, dynamic>> _gradosAcademicos = [];
   
   // Valores seleccionados
   String? _selectedCarreraId;
-  String? _selectedEstadoLaboralId;
+  String? _selectedGradoAcademicoId;
   
   bool _isLoading = false;
   bool _isLoadingData = true;
@@ -55,32 +52,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       
       _nombreController = TextEditingController(text: egresado.nombre);
       _apellidoController = TextEditingController(text: egresado.apellido);
-      _telefonoController = TextEditingController(text: egresado.telefono ?? '');
-      _ciudadController = TextEditingController(text: egresado.ciudad ?? '');
-      _empresaController = TextEditingController(text: egresado.empresaActual ?? '');
-      _cargoController = TextEditingController(text: egresado.cargoActual ?? '');
+      _celularController = TextEditingController(text: egresado.celular);
+      _telefonoAlternativoController = TextEditingController(text: egresado.telefonoAlternativo ?? '');
+      _correoPersonalController = TextEditingController(text: egresado.correoPersonal);
       
       _selectedCarreraId = egresado.carreraId;
-      _selectedEstadoLaboralId = egresado.estadoLaboralId;
+      _selectedGradoAcademicoId = egresado.gradoAcademicoId;
     } else {
       _nombreController = TextEditingController();
       _apellidoController = TextEditingController();
-      _telefonoController = TextEditingController();
-      _ciudadController = TextEditingController();
-      _empresaController = TextEditingController();
-      _cargoController = TextEditingController();
+      _celularController = TextEditingController();
+      _telefonoAlternativoController = TextEditingController();
+      _correoPersonalController = TextEditingController();
     }
   }
 
   Future<void> _loadData() async {
     try {
       final carreras = await _carrerasService.getCarreras();
-      final estados = await _estadosLaboralesService.getEstadosLaborales();
+      final grados = await _authService.getGradosAcademicos();
       
       if (mounted) {
         setState(() {
           _carreras = carreras;
-          _estadosLaborales = estados;
+          _gradosAcademicos = grados;
           _isLoadingData = false;
         });
       }
@@ -98,10 +93,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _nombreController.dispose();
     _apellidoController.dispose();
-    _telefonoController.dispose();
-    _ciudadController.dispose();
-    _empresaController.dispose();
-    _cargoController.dispose();
+    _celularController.dispose();
+    _telefonoAlternativoController.dispose();
+    _correoPersonalController.dispose();
     super.dispose();
   }
 
@@ -149,13 +143,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       
                       const SizedBox(height: AppConstants.paddingLarge),
                       
-                      // Información Académica
-                      _buildAcademicSection(),
+                      // Información de Contacto
+                      _buildContactSection(),
                       
                       const SizedBox(height: AppConstants.paddingLarge),
                       
-                      // Información Laboral
-                      _buildWorkSection(),
+                      // Información Académica
+                      _buildAcademicSection(),
                       
                       const SizedBox(height: AppConstants.paddingLarge * 2),
                       
@@ -232,13 +226,64 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 return null;
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContactSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.paddingLarge),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.contact_phone_outlined,
+                  color: AppColors.info,
+                ),
+                const SizedBox(width: AppConstants.paddingSmall),
+                Text(
+                  'Información de Contacto',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
             
             const SizedBox(height: AppConstants.paddingMedium),
             
             TextFormField(
-              controller: _telefonoController,
+              controller: _celularController,
               decoration: InputDecoration(
-                labelText: 'Teléfono',
+                labelText: 'Celular',
+                prefixIcon: Icon(Icons.phone_android),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+                ),
+              ),
+              keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'El celular es requerido';
+                }
+                return null;
+              },
+            ),
+            
+            const SizedBox(height: AppConstants.paddingMedium),
+            
+            TextFormField(
+              controller: _telefonoAlternativoController,
+              decoration: InputDecoration(
+                labelText: 'Teléfono Alternativo (Opcional)',
                 prefixIcon: Icon(Icons.phone),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppConstants.borderRadius),
@@ -250,14 +295,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: AppConstants.paddingMedium),
             
             TextFormField(
-              controller: _ciudadController,
+              controller: _correoPersonalController,
               decoration: InputDecoration(
-                labelText: 'Ciudad',
-                prefixIcon: Icon(Icons.location_city),
+                labelText: 'Correo Personal',
+                prefixIcon: Icon(Icons.email_outlined),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppConstants.borderRadius),
                 ),
               ),
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'El correo personal es requerido';
+                }
+                if (!value.contains('@')) {
+                  return 'Ingrese un correo válido';
+                }
+                return null;
+              },
             ),
           ],
         ),
@@ -294,7 +349,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: AppConstants.paddingMedium),
             
             DropdownButtonFormField<String>(
+              value: _selectedGradoAcademicoId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Grado Académico',
+                prefixIcon: Icon(Icons.school),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+                ),
+              ),
+              items: _gradosAcademicos.map((grado) {
+                return DropdownMenuItem<String>(
+                  value: grado['id'],
+                  child: Text(
+                    grado['nombre'],
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedGradoAcademicoId = value;
+                  // Resetear carrera si cambia el grado (opcional, depende de la lógica)
+                  _selectedCarreraId = null;
+                });
+              },
+              validator: (value) => value == null ? 'Seleccione un grado' : null,
+            ),
+            
+            const SizedBox(height: AppConstants.paddingMedium),
+            
+            DropdownButtonFormField<String>(
               value: _selectedCarreraId,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Carrera',
                 prefixIcon: Icon(Icons.school),
@@ -302,10 +389,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   borderRadius: BorderRadius.circular(AppConstants.borderRadius),
                 ),
               ),
-              items: _carreras.map((carrera) {
+              items: _carreras
+                  .where((c) => _selectedGradoAcademicoId == null || c['grado_academico_id'] == _selectedGradoAcademicoId)
+                  .map((carrera) {
                 return DropdownMenuItem<String>(
                   value: carrera['id'],
-                  child: Text(carrera['nombre']),
+                  child: Text(
+                    carrera['nombre'],
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 );
               }).toList(),
               onChanged: (value) {
@@ -313,87 +405,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   _selectedCarreraId = value;
                 });
               },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWorkSection() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(AppConstants.paddingLarge),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.work_outline,
-                  color: AppColors.info,
-                ),
-                const SizedBox(width: AppConstants.paddingSmall),
-                Text(
-                  'Información Laboral',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: AppConstants.paddingMedium),
-            
-            DropdownButtonFormField<String>(
-              value: _selectedEstadoLaboralId,
-              decoration: InputDecoration(
-                labelText: 'Estado Laboral',
-                prefixIcon: Icon(Icons.work),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-                ),
-              ),
-              items: _estadosLaborales.map((estado) {
-                return DropdownMenuItem<String>(
-                  value: estado['id'],
-                  child: Text(estado['nombre']),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedEstadoLaboralId = value;
-                });
-              },
-            ),
-            
-            const SizedBox(height: AppConstants.paddingMedium),
-            
-            TextFormField(
-              controller: _empresaController,
-              decoration: InputDecoration(
-                labelText: 'Empresa Actual',
-                prefixIcon: Icon(Icons.business),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: AppConstants.paddingMedium),
-            
-            TextFormField(
-              controller: _cargoController,
-              decoration: InputDecoration(
-                labelText: 'Cargo Actual',
-                prefixIcon: Icon(Icons.badge),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-                ),
-              ),
+              validator: (value) => value == null ? 'Seleccione una carrera' : null,
             ),
           ],
         ),
@@ -447,12 +459,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await _authService.updateProfile(
         nombre: _nombreController.text.trim(),
         apellido: _apellidoController.text.trim(),
-        telefono: _telefonoController.text.trim().isEmpty ? null : _telefonoController.text.trim(),
-        ciudad: _ciudadController.text.trim().isEmpty ? null : _ciudadController.text.trim(),
+        celular: _celularController.text.trim(),
+        telefonoAlternativo: _telefonoAlternativoController.text.trim().isEmpty ? null : _telefonoAlternativoController.text.trim(),
+        correoPersonal: _correoPersonalController.text.trim(),
         carreraId: _selectedCarreraId,
-        estadoLaboralId: _selectedEstadoLaboralId,
-        empresaActual: _empresaController.text.trim().isEmpty ? null : _empresaController.text.trim(),
-        cargoActual: _cargoController.text.trim().isEmpty ? null : _cargoController.text.trim(),
+        gradoAcademicoId: _selectedGradoAcademicoId,
       );
 
       // Refrescar el perfil en el AuthBloc

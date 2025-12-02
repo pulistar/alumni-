@@ -9,6 +9,7 @@ enum TipoDocumento {
   momentoOle('momento_ole', 'Momento OLE'),
   datosEgresados('datos_egresados', 'Datos de Egresados'),
   bolsaEmpleo('bolsa_empleo', 'Bolsa de Empleo'),
+  unificado('unificado', 'PDF Unificado'),
   otro('otro', 'Otro');
 
   const TipoDocumento(this.value, this.displayName);

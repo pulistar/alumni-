@@ -13,7 +13,7 @@ import { UpdateEgresadoDto } from './dto/update-egresado.dto';
 export class EgresadosService {
   private readonly logger = new Logger(EgresadosService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(private readonly supabaseService: SupabaseService) { }
 
   /**
    * Create or link egresado profile to Supabase User
@@ -37,7 +37,7 @@ export class EgresadosService {
       .getClient()
       .from('egresados')
       .select('id')
-      .eq('correo', email)
+      .eq('correo_institucional', email)
       .is('deleted_at', null)
       .single();
 
@@ -51,8 +51,8 @@ export class EgresadosService {
       .from('egresados')
       .insert({
         uid,
-        correo: email,
         ...dto,
+        correo_institucional: email,
         // habilitado defaults to false in DB
         // Admin will enable via Excel upload or manual toggle
       })
@@ -145,7 +145,8 @@ export class EgresadosService {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('carreras')
-      .select('id, nombre, codigo')
+      .select('id, nombre, codigo, grado_academico_id')
+      .eq('activa', true)
       .order('nombre', { ascending: true });
 
     if (error) {
@@ -169,6 +170,44 @@ export class EgresadosService {
     if (error) {
       this.logger.error(`Error fetching estados laborales: ${error.message}`);
       throw new InternalServerErrorException('Error al obtener los estados laborales');
+    }
+
+    return data;
+  }
+
+  /**
+   * Get all grados academicos
+   */
+  async getGradosAcademicos() {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('grados_academicos')
+      .select('id, nombre, nivel')
+      .eq('activo', true)
+      .order('nivel', { ascending: true });
+
+    if (error) {
+      this.logger.error(`Error fetching grados academicos: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener los grados académicos');
+    }
+
+    return data;
+  }
+
+  /**
+   * Get all tipos de documento
+   */
+  async getTiposDocumento() {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('tipos_documento')
+      .select('id, codigo, nombre')
+      .eq('activo', true)
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      this.logger.error(`Error fetching tipos de documento: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener los tipos de documento');
     }
 
     return data;

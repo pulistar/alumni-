@@ -10,9 +10,12 @@ import { FiltrosEgresadosDto } from './dto/filtros-egresados.dto';
 import { SearchEgresadosDto } from './dto/search-egresados.dto';
 import { CreatePreguntaDto, UpdatePreguntaDto } from './dto/pregunta.dto';
 import { CreateModuloDto, UpdateModuloDto } from './dto/modulo.dto';
+import { CreateCarreraDto, UpdateCarreraDto } from './dto/carrera.dto';
+import { CreateGradoAcademicoDto, UpdateGradoAcademicoDto } from './dto/grado-academico.dto';
 import { DashboardStats } from './interfaces/dashboard-stats.interface';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 
@@ -24,6 +27,7 @@ export class AdminService {
     private readonly supabaseService: SupabaseService,
     private readonly notificacionesService: NotificacionesService,
     private readonly mailService: MailService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   /**
@@ -612,6 +616,21 @@ export class AdminService {
       } catch (err) {
         this.logger.error(`Failed to send email: ${err.message}`);
         // Don't throw - email is not critical
+      }
+
+      // Send push notification if user has FCM token (best-effort)
+      if (data.fcm_token) {
+        try {
+          const nombreCompleto = `${data.nombre} ${data.apellido}`;
+          await this.notificationsService.sendHabilitacionNotification(
+            data.fcm_token,
+            nombreCompleto,
+          );
+          this.logger.log(`Push notification sent to ${data.correo}`);
+        } catch (err) {
+          this.logger.error(`Failed to send push notification: ${err.message}`);
+          // Don't throw - push notification is not critical
+        }
       }
     }
 
@@ -1334,6 +1353,194 @@ export class AdminService {
     }
 
     this.logger.log(`Módulo ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
+    return data;
+  }
+
+  // ==================== CRUD DE CARRERAS ====================
+
+  async getCarreras(activa?: boolean) {
+    let query = this.supabaseService
+      .getClient()
+      .from('carreras')
+      .select('*, grados_academicos(nombre)')
+      .order('nombre', { ascending: true });
+
+    if (activa !== undefined) {
+      query = query.eq('activa', activa);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      this.logger.error(`Error fetching careers: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener carreras');
+    }
+
+    return data;
+  }
+
+  async getCarrera(id: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('carreras')
+      .select('*, grados_academicos(nombre)')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundException('Carrera no encontrada');
+    }
+
+    return data;
+  }
+
+  async createCarrera(dto: CreateCarreraDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('carreras')
+      .insert({
+        ...dto,
+        activa: dto.activa ?? true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error creating career: ${error.message}`);
+      throw new InternalServerErrorException('Error al crear carrera');
+    }
+
+    this.logger.log(`Carrera creada: ${data.id}`);
+    return data;
+  }
+
+  async updateCarrera(id: string, dto: UpdateCarreraDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('carreras')
+      .update(dto)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundException('Carrera no encontrada');
+    }
+
+    this.logger.log(`Carrera actualizada: ${id}`);
+    return data;
+  }
+
+  async toggleCarrera(id: string) {
+    const carrera = await this.getCarrera(id);
+
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('carreras')
+      .update({ activa: !carrera.activa })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new InternalServerErrorException('Error al actualizar carrera');
+    }
+
+    this.logger.log(`Carrera ${data.activa ? 'activada' : 'desactivada'}: ${id}`);
+    return data;
+  }
+
+  // ==================== CRUD DE GRADOS ACADÉMICOS ====================
+
+  async getGradosAcademicos(activo?: boolean) {
+    let query = this.supabaseService
+      .getClient()
+      .from('grados_academicos')
+      .select('*')
+      .order('nivel', { ascending: true });
+
+    if (activo !== undefined) {
+      query = query.eq('activo', activo);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      this.logger.error(`Error fetching academic degrees: ${error.message}`);
+      throw new InternalServerErrorException('Error al obtener grados académicos');
+    }
+
+    return data;
+  }
+
+  async getGradoAcademico(id: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('grados_academicos')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundException('Grado académico no encontrado');
+    }
+
+    return data;
+  }
+
+  async createGradoAcademico(dto: CreateGradoAcademicoDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('grados_academicos')
+      .insert({
+        ...dto,
+        activo: dto.activo ?? true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error(`Error creating academic degree: ${error.message}`);
+      throw new InternalServerErrorException('Error al crear grado académico');
+    }
+
+    this.logger.log(`Grado académico creado: ${data.id}`);
+    return data;
+  }
+
+  async updateGradoAcademico(id: string, dto: UpdateGradoAcademicoDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('grados_academicos')
+      .update(dto)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundException('Grado académico no encontrado');
+    }
+
+    this.logger.log(`Grado académico actualizado: ${id}`);
+    return data;
+  }
+
+  async toggleGradoAcademico(id: string) {
+    const grado = await this.getGradoAcademico(id);
+
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('grados_academicos')
+      .update({ activo: !grado.activo })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new InternalServerErrorException('Error al actualizar grado académico');
+    }
+
+    this.logger.log(`Grado académico ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
     return data;
   }
 }

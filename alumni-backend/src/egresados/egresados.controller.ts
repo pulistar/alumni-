@@ -19,7 +19,7 @@ import { ICurrentUser } from '../auth/interfaces/current-user.interface';
 @Controller('egresados')
 @UseGuards(SupabaseAuthGuard)
 export class EgresadosController {
-  constructor(private readonly egresadosService: EgresadosService) {}
+  constructor(private readonly egresadosService: EgresadosService) { }
 
   @Post('completar-perfil')
   @HttpCode(HttpStatus.CREATED)
@@ -53,5 +53,17 @@ export class EgresadosController {
   @HttpCode(HttpStatus.OK)
   async getEstadosLaborales() {
     return this.egresadosService.getEstadosLaborales();
+  }
+
+  @Get('grados-academicos')
+  @HttpCode(HttpStatus.OK)
+  async getGradosAcademicos() {
+    return this.egresadosService.getGradosAcademicos();
+  }
+
+  @Get('tipos-documento')
+  @HttpCode(HttpStatus.OK)
+  async getTiposDocumento() {
+    return this.egresadosService.getTiposDocumento();
   }
 }

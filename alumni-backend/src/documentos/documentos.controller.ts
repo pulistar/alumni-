@@ -24,7 +24,7 @@ import { ICurrentUser } from '../auth/interfaces/current-user.interface';
 @Controller('documentos')
 @UseGuards(SupabaseAuthGuard)
 export class DocumentosController {
-  constructor(private readonly documentosService: DocumentosService) {}
+  constructor(private readonly documentosService: DocumentosService) { }
 
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
