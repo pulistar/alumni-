@@ -32,13 +32,44 @@ jobs:
         working-directory: ./egresados_app
         run: flutter pub get
       
-      - name: Fix app_links Gradle bug
+      - name: Fix app_links build.gradle
         run: |
-          # Patch the corrupted build.gradle in app_links
-          APP_LINKS_PATH="$HOME/.pub-cache/hosted/pub.dev/app_links-6.4.1/android/build.gradle"
-          if [ -f "$APP_LINKS_PATH" ]; then
-            echo "Patching app_links build.gradle..."
-            sed -i '28s/.*/        compileSdk = flutter.compileSdkVersion/' "$APP_LINKS_PATH"
+          APP_LINKS_BUILD="$HOME/.pub-cache/hosted/pub.dev/app_links-6.4.1/android/build.gradle"
+          if [ -f "$APP_LINKS_BUILD" ]; then
+            echo "Fixing app_links build.gradle..."
+            cat > "$APP_LINKS_BUILD" << 'GRADLE_EOF'
+          group 'com.llfbandit.app_links'
+          version '1.0'
+          
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+          
+          apply plugin: 'com.android.library'
+          
+          android {
+              compileSdk 34
+              
+              defaultConfig {
+                  minSdk 19
+              }
+              
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+          }
+          
+          dependencies {
+              implementation 'androidx.browser:browser:1.8.0'
+          }
+          GRADLE_EOF
           fi
       
       - name: Build APK
