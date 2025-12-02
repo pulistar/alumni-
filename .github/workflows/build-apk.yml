@@ -28,44 +28,18 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
       
-      - name: Create google-services.json
-        working-directory: ./egresados_app/android/app
-        run: |
-          cat > google-services.json << 'EOF'
-          {
-            "project_info": {
-              "project_number": "123456789",
-              "project_id": "alumni-ucc-dummy",
-              "storage_bucket": "alumni-ucc-dummy.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:123456789:android:abcdef123456",
-                  "android_client_info": {
-                    "package_name": "com.ucc.egresados_app"
-                  }
-                },
-                "oauth_client": [],
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDummyKeyForBuildOnly"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                }
-              }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
-      
       - name: Get dependencies
         working-directory: ./egresados_app
         run: flutter pub get
+      
+      - name: Fix app_links Gradle bug
+        run: |
+          # Patch the corrupted build.gradle in app_links
+          APP_LINKS_PATH="$HOME/.pub-cache/hosted/pub.dev/app_links-6.4.1/android/build.gradle"
+          if [ -f "$APP_LINKS_PATH" ]; then
+            echo "Patching app_links build.gradle..."
+            sed -i '28s/.*/        compileSdk = flutter.compileSdkVersion/' "$APP_LINKS_PATH"
+          fi
       
       - name: Build APK
         working-directory: ./egresados_app

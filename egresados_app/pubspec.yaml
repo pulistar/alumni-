@@ -50,7 +50,7 @@ dependencies:
   intl: ^0.18.1
   url_launcher: ^6.2.1
   share_plus: ^7.2.1
-  app_links: ^6.3.2
+  # app_links: ^6.3.2  # Temporalmente deshabilitado por bug de Gradle
   
   # Notifications (optional)
   # firebase_messaging: ^14.7.6
