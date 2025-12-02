@@ -1640,87 +1640,6 @@ export class AdminService {
 
   // ==================== CRUD DE CARRERAS ====================
 
-  async getCarreras(activa?: boolean) {
-    const client = this.supabaseService.getClient();
-    let query = client
-      .from('carreras')
-      .select('*')
-      .order('nombre', { ascending: true });
-
-    if (activa !== undefined) {
-      query = query.eq('activa', activa);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      this.logger.error(`Error getting carreras: ${error.message}`);
-      throw new Error(`Error al obtener carreras: ${error.message}`);
-    }
-
-    return data;
-  }
-
-  async getCarrera(id: string) {
-    const client = this.supabaseService.getClient();
-    const { data, error } = await client
-      .from('carreras')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      this.logger.error(`Error getting carrera: ${error.message}`);
-      throw new Error(`Error al obtener carrera: ${error.message}`);
-    }
-
-    return data;
-  }
-
-  async createCarrera(dto: any) {
-    const client = this.supabaseService.getClient();
-    const { data, error } = await client
-      .from('carreras')
-      .insert({
-        nombre: dto.nombre,
-        codigo: dto.codigo,
-        activa: dto.activa !== undefined ? dto.activa : true,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      this.logger.error(`Error creating carrera: ${error.message}`);
-      throw new Error(`Error al crear carrera: ${error.message}`);
-    }
-
-    return data;
-  }
-
-  async updateCarrera(id: string, dto: any) {
-    const client = this.supabaseService.getClient();
-    const updateData: any = {};
-
-    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
-    if (dto.codigo !== undefined) updateData.codigo = dto.codigo;
-    if (dto.activa !== undefined) updateData.activa = dto.activa;
-
-    const { data, error } = await client
-      .from('carreras')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      this.logger.error(`Error updating carrera: ${error.message}`);
-      throw new Error(`Error al actualizar carrera: ${error.message}`);
-    }
-
-    return data;
-  }
-
-  // ==================== CRUD DE CARRERAS ====================
 
   async getCarreras(activa?: boolean) {
     let query = this.supabaseService
@@ -1906,5 +1825,79 @@ export class AdminService {
 
     this.logger.log(`Grado académico ${data.activo ? 'activado' : 'desactivado'}: ${id}`);
     return data;
+  }
+
+  /**
+   * Send invitations from Excel file
+   */
+  async sendInvitationsFromExcel(file: Express.Multer.File) {
+    try {
+      // Read Excel file
+      const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+
+      // Start from row 2 (index 1) because row 1 is a title
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { range: 1 });
+
+      if (rawData.length === 0) {
+        throw new BadRequestException('El archivo Excel está vacío');
+      }
+
+      // Normalize headers
+      const data = rawData.map((r) => {
+        return Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase().trim(), v]));
+      });
+
+      const resultados = {
+        procesados: data.length,
+        enviados: 0,
+        errores: [] as any[],
+      };
+
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const rowNumber = i + 3;
+
+        try {
+          // Map columns
+          const nombreCompleto = row['nombre'];
+          const correo_institucional = row['correo-e campus'];
+          const correo_personal = row['correo-e particular'];
+
+          if (!nombreCompleto) continue;
+
+          // Split nombre
+          const nombreParts = String(nombreCompleto).trim().split(' ');
+          const nombre = nombreParts[0];
+
+          // Convert to string and validate institutional email
+          const correoInstitucionalStr = correo_institucional ? String(correo_institucional).trim() : '';
+          if (correoInstitucionalStr && correoInstitucionalStr.includes('@')) {
+            await this.mailService.sendInvitacion(correoInstitucionalStr, nombre);
+            resultados.enviados++;
+          }
+
+          // Convert to string and validate personal email
+          const correoPersonalStr = correo_personal ? String(correo_personal).trim() : '';
+          if (correoPersonalStr && correoPersonalStr.includes('@')) {
+            await this.mailService.sendInvitacion(correoPersonalStr, nombre);
+            resultados.enviados++;
+          }
+
+        } catch (err) {
+          resultados.errores.push({
+            fila: rowNumber,
+            error: err.message,
+          });
+        }
+      }
+
+      return resultados;
+
+    } catch (error) {
+      this.logger.error(`Error sending invitations: ${error.message}`);
+      throw new BadRequestException(`Error al procesar invitaciones: ${error.message}`);
+    }
   }
 }

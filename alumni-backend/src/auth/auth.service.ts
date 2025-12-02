@@ -29,7 +29,7 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .select('*')
-      .eq('correo_institucional', email)
+      .eq('correo', email)
       .single();
 
     if (error || !admin) {
@@ -52,7 +52,7 @@ export class AuthService {
     // 3. Generate JWT
     const payload: ITokenPayload = {
       sub: admin.id,
-      email: admin.correo_institucional,
+      email: admin.correo,
       role: admin.rol,
     };
 
@@ -64,7 +64,7 @@ export class AuthService {
       accessToken,
       user: {
         id: admin.id,
-        email: admin.correo_institucional,
+        email: admin.correo,
         role: admin.rol,
         nombre: admin.nombre,
         apellido: admin.apellido,
@@ -90,11 +90,11 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .select('id')
-      .eq('correo_institucional', correo_institucional)
+      .eq('correo', correo_institucional)
       .single();
 
     if (existingAdmin) {
-      throw new BadRequestException('El correo_institucional electrónico ya está registrado');
+      throw new BadRequestException('El correo electrónico ya está registrado');
     }
 
     // 3. Hash password
@@ -106,7 +106,7 @@ export class AuthService {
       .getClient()
       .from('administradores')
       .insert({
-        correo_institucional,
+        correo: correo_institucional,
         nombre,
         apellido,
         password_hash: passwordHash,
@@ -124,7 +124,7 @@ export class AuthService {
     // 5. Generate JWT
     const payload: ITokenPayload = {
       sub: newAdmin.id,
-      email: newAdmin.correo_institucional,
+      email: newAdmin.correo,
       role: newAdmin.rol,
     };
 
@@ -136,7 +136,7 @@ export class AuthService {
       accessToken,
       user: {
         id: newAdmin.id,
-        email: newAdmin.correo_institucional,
+        email: newAdmin.correo,
         role: newAdmin.rol,
         nombre: newAdmin.nombre,
         apellido: newAdmin.apellido,
