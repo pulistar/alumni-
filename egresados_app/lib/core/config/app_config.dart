@@ -32,7 +32,8 @@ class DevelopmentEnvironment implements AppEnvironment {
   String get supabaseUrl {
     const envUrl = String.fromEnvironment('SUPABASE_URL');
     if (envUrl.isEmpty) {
-      throw Exception('⚠️ SUPABASE_URL no encontrada. Configura --dart-define o launch.json');
+      // Fallback a las credenciales de producción
+      return 'https://cqumdqgrcbrqlrmsfswg.supabase.co';
     }
     return envUrl;
   }
@@ -41,7 +42,8 @@ class DevelopmentEnvironment implements AppEnvironment {
   String get supabaseAnonKey {
     const envKey = String.fromEnvironment('SUPABASE_ANON_KEY');
     if (envKey.isEmpty) {
-      throw Exception('⚠️ SUPABASE_ANON_KEY no encontrada. Configura --dart-define o launch.json');
+      // Fallback a la key de producción
+      return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxdW1kcWdyY2JycWxybXNmc3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MzQ4MDksImV4cCI6MjA3OTUxMDgwOX0.x4Nl5UyU135Ez8o5JGOCHl_je0PApwcLC82apwJP40A';
     }
     return envKey;
   }
@@ -50,9 +52,9 @@ class DevelopmentEnvironment implements AppEnvironment {
   String get apiBaseUrl {
     const envUrl = String.fromEnvironment('API_BASE_URL');
     if (envUrl.isEmpty) {
-       // Valor por defecto SOLO para la URL local de desarrollo (ngrok cambia mucho)
-       // Esto es menos crítico que las keys de Supabase, pero idealmente también debería ir por env
-       return 'https://aditya-pedimented-adela.ngrok-free.dev/api';
+       // Valor por defecto apunta a producción en Render
+       // Para desarrollo local, configura --dart-define en launch.json
+       return 'https://alumni-backend-4ej0.onrender.com/api';
     }
     return envUrl;
   }
