@@ -452,15 +452,15 @@ export class AdminService {
     const { data: egresados, error } = await client
       .from('egresados')
       .select('estado_laboral_id')
-      .is('deleted_at', null)
-      .not('estado_laboral_id', 'is', null);
+      .is('deleted_at', null);
+    // Removed .not('estado_laboral_id', 'is', null) to include everyone
 
     if (error) {
       this.logger.error(`Error getting employment rate: ${error.message}`);
       throw new Error(`Error getting employment rate: ${error.message}`);
     }
 
-    this.logger.log(`Found ${egresados?.length || 0} egresados with estado_laboral`);
+    this.logger.log(`Found ${egresados?.length || 0} egresados for employment stats`);
 
     // Manually fetch estados_laborales
     const estadoIds = [...new Set((egresados || []).map(e => e.estado_laboral_id).filter(Boolean))];
@@ -476,6 +476,11 @@ export class AdminService {
 
     const stats = (egresados || []).reduce(
       (acc: any, e: any) => {
+        if (!e.estado_laboral_id) {
+          acc.otros++; // Count nulls as 'otros' (or could be 'sin_informacion')
+          return acc;
+        }
+
         const estadoData = estadosMap.get(e.estado_laboral_id);
         const estado = estadoData?.nombre?.toLowerCase() || '';
         if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
@@ -655,6 +660,56 @@ export class AdminService {
     }
 
     return result;
+  }
+
+  /**
+   * Get competencies by career (average scores by category and career)
+   */
+  async getCompetenciasPorCarrera() {
+    const client = this.supabaseService.getClient();
+
+    const { data: respuestas } = await client
+      .from('respuestas_autoevaluacion')
+      .select(`
+        respuesta_numerica,
+        preguntas_autoevaluacion(categoria, tipo),
+        egresado:egresados(carrera_id, carreras(nombre))
+      `)
+      .eq('preguntas_autoevaluacion.tipo', 'likert')
+      .not('respuesta_numerica', 'is', null);
+
+    if (!respuestas || respuestas.length === 0) {
+      return [];
+    }
+
+    // Group by career and category
+    const grouped = respuestas.reduce((acc: any, r: any) => {
+      const carrera = r.egresado?.carreras?.nombre || 'Sin carrera';
+      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categoría';
+
+      if (!acc[carrera]) {
+        acc[carrera] = {};
+      }
+
+      if (!acc[carrera][categoria]) {
+        acc[carrera][categoria] = { sum: 0, count: 0 };
+      }
+
+      acc[carrera][categoria].sum += r.respuesta_numerica;
+      acc[carrera][categoria].count++;
+
+      return acc;
+    }, {});
+
+    // Transform to array format
+    return Object.entries(grouped).map(([carrera, categorias]: [string, any]) => ({
+      carrera,
+      competencias: Object.entries(categorias).map(([categoria, stats]: [string, any]) => ({
+        categoria,
+        promedio: stats.count > 0 ? Number((stats.sum / stats.count).toFixed(2)) : 0,
+        total_respuestas: stats.count,
+      })),
+    }));
   }
 
   /**

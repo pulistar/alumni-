@@ -249,6 +249,28 @@ class ApiService {
     }
   }
 
+  /// Get competencies by career
+  Future<List<dynamic>> getCompetenciasPorCarrera(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/analytics/competencias-carrera'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Error al obtener competencias por carrera');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al obtener competencias por carrera');
+    }
+  }
+
   /// Get egresados list with filters
   Future<Map<String, dynamic>> getEgresados({
     required String token,

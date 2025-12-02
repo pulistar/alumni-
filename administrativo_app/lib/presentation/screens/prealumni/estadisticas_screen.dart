@@ -25,6 +25,7 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
   List<dynamic>? _empleabilidadCarrera;
   List<dynamic>? _embudoProceso;
   List<dynamic>? _radarCompetencias;
+  List<dynamic>? _competenciasCarrera;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -56,6 +57,7 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
         _apiService.getEmpleabilidadCarrera(token),
         _apiService.getEmbudoProceso(token),
         _apiService.getRadarCompetencias(token),
+        _apiService.getCompetenciasPorCarrera(token),
       ]);
 
       if (mounted) {
@@ -66,6 +68,7 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
           _empleabilidadCarrera = results[3] as List<dynamic>;
           _embudoProceso = results[4] as List<dynamic>;
           _radarCompetencias = results[5] as List<dynamic>;
+          _competenciasCarrera = results[6] as List<dynamic>;
           _isLoading = false;
         });
       }
@@ -158,6 +161,10 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
               Expanded(child: _buildRadarCompetencias()),
             ],
           ),
+          const SizedBox(height: 16),
+          
+          // Row 4: Competencies by Career
+          _buildCompetenciasPorCarrera(),
         ],
       ),
     );
@@ -242,7 +249,13 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
       return _buildEmptyCard('Tasa de Empleabilidad', 'No hay datos disponibles');
     }
 
-    final empleados = (_tasaEmpleabilidad!['empleados'] as num?)?.toDouble() ?? 0;
+    final total = (_tasaEmpleabilidad!['total'] as num?)?.toDouble() ?? 0;
+
+  if (total == 0) {
+    return _buildEmptyCard('Tasa de Empleabilidad', 'No hay datos de empleabilidad registrados');
+  }
+
+  final empleados = (_tasaEmpleabilidad!['empleados'] as num?)?.toDouble() ?? 0;
     final desempleados = (_tasaEmpleabilidad!['desempleados'] as num?)?.toDouble() ?? 0;
     final estudiando = (_tasaEmpleabilidad!['estudiando'] as num?)?.toDouble() ?? 0;
     final otros = (_tasaEmpleabilidad!['otros'] as num?)?.toDouble() ?? 0;
@@ -539,6 +552,106 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
     );
   }
 
+  // Chart 6: Competencies by Career
+  Widget _buildCompetenciasPorCarrera() {
+    if (_competenciasCarrera == null || _competenciasCarrera!.isEmpty) {
+      return _buildEmptyCard('Competencias por Carrera', 'No hay datos de autoevaluación por carrera');
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Competencias por Carrera',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Promedio de calificaciones por categoría y carrera (1-5)',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            ..._competenciasCarrera!.map((carreraData) {
+              final carrera = carreraData['carrera'] as String;
+              final competencias = carreraData['competencias'] as List<dynamic>;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      carrera,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 12),
+                    ...competencias.map((comp) {
+                      final categoria = comp['categoria'] as String;
+                      final promedio = (comp['promedio'] as num).toDouble();
+                      final totalRespuestas = comp['total_respuestas'] as int;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    categoria,
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                ),
+                                Text(
+                                  '${promedio.toStringAsFixed(1)} / 5.0',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _getColorForScore(promedio),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '($totalRespuestas)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(
+                              value: promedio / 5.0,
+                              minHeight: 8,
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(_getColorForScore(promedio)),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getColorForScore(double score) {
+    if (score >= 4.0) return Colors.green;
+    if (score >= 3.0) return Colors.blue;
+    if (score >= 2.0) return Colors.orange;
+    return Colors.red;
+  }
+
   Future<void> _exportEstadisticas() async {
     try {
       // Show loading
@@ -676,6 +789,34 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
               ),
+              pw.SizedBox(height: 20),
+            ],
+            
+            // Competencias por Carrera
+            if (_competenciasCarrera != null && _competenciasCarrera!.isNotEmpty) ...[
+              pw.Header(level: 1, text: 'Competencias por Carrera'),
+              ..._competenciasCarrera!.map((carreraData) {
+                final carrera = carreraData['carrera'] as String;
+                final competencias = carreraData['competencias'] as List<dynamic>;
+                
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Header(level: 2, text: carrera),
+                    pw.Table.fromTextArray(
+                      headers: ['Categoría', 'Promedio', 'Total Respuestas'],
+                      data: competencias.map((comp) => [
+                        comp['categoria'].toString(),
+                        comp['promedio'].toString(),
+                        comp['total_respuestas'].toString(),
+                      ]).toList(),
+                      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                    ),
+                    pw.SizedBox(height: 12),
+                  ],
+                );
+              }).toList(),
             ],
           ],
         ),
