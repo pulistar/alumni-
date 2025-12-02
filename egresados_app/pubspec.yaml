@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.10.0 <4.0.0'
+  sdk: '>=3.1.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -50,7 +50,7 @@ dependencies:
   intl: ^0.18.1
   url_launcher: ^6.2.1
   share_plus: ^7.2.1
-  app_links: ^7.0.0
+  app_links: ^6.3.2
   
   # Notifications (optional)
   # firebase_messaging: ^14.7.6
