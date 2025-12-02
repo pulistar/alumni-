@@ -4,6 +4,7 @@ export enum TipoDocumento {
   MOMENTO_OLE = 'momento_ole',
   DATOS_EGRESADOS = 'datos_egresados',
   BOLSA_EMPLEO = 'bolsa_empleo',
+  UNIFICADO = 'unificado',
   OTRO = 'otro',
 }
 

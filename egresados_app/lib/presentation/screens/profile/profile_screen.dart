@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../data/services/carreras_service.dart';
-import '../../../data/services/estados_laborales_service.dart';
 import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_state.dart';
 
@@ -20,9 +19,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   final CarrerasService _carrerasService = CarrerasService();
-  final EstadosLaboralesService _estadosLaboralesService = EstadosLaboralesService();
   String? _carreraNombre;
-  String? _estadoLaboralNombre;
 
   @override
   void initState() {
@@ -50,14 +47,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     
     _animationController.forward();
     _loadCarreraNombre();
-    _loadEstadoLaboralNombre();
   }
 
   void _loadCarreraNombre() async {
     final authState = context.read<AuthBloc>().state;
-    if (authState is AuthenticatedWithProfile && authState.egresado.carreraId != null) {
+    if (authState is AuthenticatedWithProfile) {
       try {
-        final nombre = await _carrerasService.getCarreraNombre(authState.egresado.carreraId!);
+        final nombre = await _carrerasService.getCarreraNombre(authState.egresado.carreraId);
         if (mounted) {
           setState(() {
             _carreraNombre = nombre;
@@ -65,22 +61,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       } catch (e) {
         print('❌ Error cargando nombre de carrera: $e');
-      }
-    }
-  }
-
-  void _loadEstadoLaboralNombre() async {
-    final authState = context.read<AuthBloc>().state;
-    if (authState is AuthenticatedWithProfile && authState.egresado.estadoLaboralId != null) {
-      try {
-        final nombre = await _estadosLaboralesService.getEstadoLaboralNombre(authState.egresado.estadoLaboralId!);
-        if (mounted) {
-          setState(() {
-            _estadoLaboralNombre = nombre;
-          });
-        }
-      } catch (e) {
-        print('❌ Error cargando nombre de estado laboral: $e');
       }
     }
   }
@@ -146,11 +126,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   
                   // Información académica
                   _buildAcademicInfoCard(egresado),
-                  
-                  const SizedBox(height: AppConstants.paddingLarge),
-                  
-                  // Información laboral
-                  _buildWorkInfoCard(egresado),
                   
                   const SizedBox(height: AppConstants.paddingLarge),
                   
@@ -223,7 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             
             // Email
             Text(
-              egresado.correo,
+              egresado.correoInstitucional,
               style: TextStyle(
                 fontSize: 16,
                 color: AppColors.textOnPrimary.withOpacity(0.9),
@@ -314,11 +289,13 @@ class _ProfileScreenState extends State<ProfileScreen>
             
             _buildInfoRow('Nombre', egresado.nombre),
             _buildInfoRow('Apellido', egresado.apellido),
-            _buildInfoRow('Correo', egresado.correo),
-            if (egresado.telefono != null)
-              _buildInfoRow('Teléfono', egresado.telefono!),
-            if (egresado.ciudad != null)
-              _buildInfoRow('Ciudad', egresado.ciudad!),
+            _buildInfoRow('ID Universitario', egresado.idUniversitario),
+            _buildInfoRow('Documento', egresado.documento),
+            _buildInfoRow('Lugar Exp.', egresado.lugarExpedicion),
+            _buildInfoRow('Celular', egresado.celular),
+            if (egresado.telefonoAlternativo != null && egresado.telefonoAlternativo!.isNotEmpty)
+              _buildInfoRow('Tel. Alternativo', egresado.telefonoAlternativo!),
+            _buildInfoRow('Correo Personal', egresado.correoPersonal),
           ],
         ),
       ),
@@ -353,58 +330,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             
             const SizedBox(height: AppConstants.paddingMedium),
             
-            if (egresado.carreraId != null)
-              _buildInfoRow(
-                'Carrera', 
-                _carreraNombre ?? 'Cargando...'
-              )
-            else
-              _buildInfoRow('Carrera', 'No especificada'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWorkInfoCard(egresado) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(AppConstants.paddingLarge),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.work_outline,
-                  color: AppColors.info,
-                ),
-                const SizedBox(width: AppConstants.paddingSmall),
-                Text(
-                  'Información Laboral',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
+            _buildInfoRow(
+              'Carrera', 
+              _carreraNombre ?? 'Cargando...'
             ),
-            
-            const SizedBox(height: AppConstants.paddingMedium),
-            
-            if (egresado.estadoLaboralId != null)
-              _buildInfoRow(
-                'Estado Laboral', 
-                _estadoLaboralNombre ?? 'Cargando...'
-              )
-            else
-              _buildInfoRow('Estado Laboral', 'No especificado'),
-            if (egresado.empresaActual != null)
-              _buildInfoRow('Empresa Actual', egresado.empresaActual!),
-            if (egresado.cargoActual != null)
-              _buildInfoRow('Cargo Actual', egresado.cargoActual!),
           ],
         ),
       ),

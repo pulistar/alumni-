@@ -13,6 +13,7 @@ import '../../widgets/custom_text_field.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_widget.dart';
 import 'profile_success_screen.dart';
+import '../settings/about_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -29,26 +30,32 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
   // Controladores de texto
   final _nombreController = TextEditingController();
   final _apellidoController = TextEditingController();
-  final _idUniversitarioController = TextEditingController();
-  final _telefonoController = TextEditingController();
+  final _celularController = TextEditingController();
   final _telefonoAlternativoController = TextEditingController();
-  final _direccionController = TextEditingController();
-  final _ciudadController = TextEditingController();
-  final _paisController = TextEditingController();
-  final _empresaActualController = TextEditingController();
-  final _cargoActualController = TextEditingController();
-  final _fechaGraduacionController = TextEditingController();
-  final _semestreGraduacionController = TextEditingController();
-  final _anioGraduacionController = TextEditingController();
+  final _correoPersonalController = TextEditingController();
+  final _documentoController = TextEditingController();
+  final _lugarExpedicionController = TextEditingController();
+  final _idUniversitarioController = TextEditingController();
   
   // Estado del formulario
   int _currentPage = 0;
+  String? _selectedTipoDocumentoId;
+  String? _selectedGradoAcademicoId;
   String? _selectedCarreraId;
-  String? _selectedEstadoLaboralId;
+  
+  // Listas de catálogos
+  List<Map<String, dynamic>> _tiposDocumento = [];
+  List<Map<String, dynamic>> _gradosAcademicos = [];
   List<Map<String, dynamic>> _carreras = [];
-  List<Map<String, dynamic>> _estadosLaborales = [];
+  List<Map<String, dynamic>> _carrerasFiltradas = [];
+  
+  // Estados de carga
+  bool _isLoadingTiposDocumento = true;
+  bool _isLoadingGradosAcademicos = true;
   bool _isLoadingCarreras = true;
-  bool _isLoadingEstadosLaborales = true;
+  
+  // Aceptación de términos
+  bool _termsAccepted = false;
   
   // Animaciones
   late AnimationController _animationController;
@@ -73,12 +80,56 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     
     _animationController.forward();
     
-    // Valores por defecto
-    _paisController.text = 'Colombia';
-    
-    // Cargar carreras y estados laborales
+    // Cargar catálogos
+    _loadTiposDocumento();
+    _loadGradosAcademicos();
     _loadCarreras();
-    _loadEstadosLaborales();
+  }
+
+  Future<void> _loadTiposDocumento() async {
+    try {
+      final authService = context.read<AuthService>();
+      final tipos = await authService.getTiposDocumento();
+      setState(() {
+        _tiposDocumento = tipos;
+        _isLoadingTiposDocumento = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingTiposDocumento = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error cargando tipos de documento: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadGradosAcademicos() async {
+    try {
+      final authService = context.read<AuthService>();
+      final grados = await authService.getGradosAcademicos();
+      setState(() {
+        _gradosAcademicos = grados;
+        _isLoadingGradosAcademicos = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingGradosAcademicos = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error cargando grados académicos: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadCarreras() async {
@@ -104,130 +155,121 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     }
   }
 
-  Future<void> _loadEstadosLaborales() async {
-    try {
-      final authService = context.read<AuthService>();
-      final estadosLaborales = await authService.getEstadosLaborales();
+  void _filterCarrerasByGrado() {
+    if (_selectedGradoAcademicoId == null) {
       setState(() {
-        _estadosLaborales = estadosLaborales;
-        _isLoadingEstadosLaborales = false;
+        _carrerasFiltradas = [];
+        _selectedCarreraId = null;
       });
-    } catch (e) {
-      setState(() {
-        _isLoadingEstadosLaborales = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error cargando estados laborales: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      return;
     }
+    
+    setState(() {
+      _carrerasFiltradas = _carreras
+          .where((c) => c['grado_academico_id'] == _selectedGradoAcademicoId)
+          .toList();
+      
+      // Reset carrera seleccionada si no está en la lista filtrada
+      if (_selectedCarreraId != null &&
+          !_carrerasFiltradas.any((c) => c['id'] == _selectedCarreraId)) {
+        _selectedCarreraId = null;
+      }
+    });
   }
 
   @override
   void dispose() {
     _nombreController.dispose();
     _apellidoController.dispose();
-    _idUniversitarioController.dispose();
-    _telefonoController.dispose();
+    _celularController.dispose();
     _telefonoAlternativoController.dispose();
-    _direccionController.dispose();
-    _ciudadController.dispose();
-    _paisController.dispose();
-    _empresaActualController.dispose();
-    _cargoActualController.dispose();
-    _fechaGraduacionController.dispose();
-    _semestreGraduacionController.dispose();
-    _anioGraduacionController.dispose();
+    _correoPersonalController.dispose();
+    _documentoController.dispose();
+    _lugarExpedicionController.dispose();
+    _idUniversitarioController.dispose();
     _pageController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
   bool _validateCurrentPage() {
-    print('🔍 Validando página $_currentPage');
-    
-    // Validar página 1: Información Personal
-    if (_currentPage == 0) {
-      print('📝 Nombre: "${_nombreController.text}"');
-      print('📝 Apellido: "${_apellidoController.text}"');
-      print('📝 ID: "${_idUniversitarioController.text}"');
-      print('📝 Teléfono: "${_telefonoController.text}"');
-      print('📝 Ciudad: "${_ciudadController.text}"');
-      print('📝 Carrera ID: $_selectedCarreraId');
-      
-      if (_nombreController.text.trim().isEmpty ||
-          _apellidoController.text.trim().isEmpty ||
-          _idUniversitarioController.text.trim().isEmpty ||
-          _telefonoController.text.trim().isEmpty ||
-          _ciudadController.text.trim().isEmpty ||
-          _selectedCarreraId == null) {
-        print('❌ Faltan campos obligatorios');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Por favor completa todos los campos obligatorios'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return false;
-      }
-      
-      // Validar formato de nombre
-      final nombreError = Validators.fullName(_nombreController.text, 'El nombre');
-      if (nombreError != null) {
-        print('❌ Error en nombre: $nombreError');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(nombreError),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return false;
-      }
-      
-      // Validar formato de apellido
-      final apellidoError = Validators.fullName(_apellidoController.text, 'El apellido');
-      if (apellidoError != null) {
-        print('❌ Error en apellido: $apellidoError');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(apellidoError),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return false;
-      }
-      
-      // Validar ID universitario
-      final idError = Validators.universityId(_idUniversitarioController.text);
-      if (idError != null) {
-        print('❌ Error en ID: $idError');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(idError),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return false;
-      }
-      
-      // Validar teléfono
-      final telefonoError = Validators.colombianPhone(_telefonoController.text);
-      if (telefonoError != null) {
-        print('❌ Error en teléfono: $telefonoError');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(telefonoError),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return false;
-      }
-      
-      print('✅ Validación página 0 exitosa');
+    switch (_currentPage) {
+      case 0: // Página 1: Datos Personales
+        if (_nombreController.text.trim().isEmpty ||
+            _apellidoController.text.trim().isEmpty ||
+            _celularController.text.trim().isEmpty ||
+            _correoPersonalController.text.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor completa todos los campos obligatorios'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return false;
+        }
+        
+        // Validar formato de correo personal
+        final emailError = Validators.email(_correoPersonalController.text);
+        if (emailError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(emailError),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return false;
+        }
+        
+        // Validar que no sea correo institucional
+        if (_correoPersonalController.text.contains('@campusucc.edu.co')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('El correo personal no puede ser institucional'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return false;
+        }
+        break;
+        
+      case 1: // Página 2: Identificación
+        if (_selectedTipoDocumentoId == null ||
+            _documentoController.text.trim().isEmpty ||
+            _lugarExpedicionController.text.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor completa todos los campos obligatorios'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return false;
+        }
+        break;
+        
+      case 2: // Página 3: Académica
+        if (_selectedGradoAcademicoId == null ||
+            _selectedCarreraId == null ||
+            _idUniversitarioController.text.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor completa todos los campos obligatorios'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return false;
+        }
+        
+        // Validar aceptación de términos
+        if (!_termsAccepted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Debes aceptar los Términos y Condiciones para continuar'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return false;
+        }
+        break;
     }
     
     return true;
@@ -235,7 +277,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
 
   void _nextPage() {
     if (_currentPage < 2) {
-      // Validar antes de avanzar
       if (!_validateCurrentPage()) {
         return;
       }
@@ -257,35 +298,26 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
   }
 
   void _submitProfile() {
-    if (_formKey.currentState!.validate()) {
-      context.read<AuthBloc>().add(
-        AuthProfileCompleted(
-          nombre: _nombreController.text.trim(),
-          apellido: _apellidoController.text.trim(),
-          idUniversitario: _idUniversitarioController.text.trim(),
-          telefono: _telefonoController.text.trim(),
-          ciudad: _ciudadController.text.trim(),
-          carreraId: _selectedCarreraId,
-          telefonoAlternativo: _telefonoAlternativoController.text.trim().isEmpty 
-              ? null : _telefonoAlternativoController.text.trim(),
-          direccion: _direccionController.text.trim().isEmpty 
-              ? null : _direccionController.text.trim(),
-          pais: _paisController.text.trim().isEmpty 
-              ? null : _paisController.text.trim(),
-          estadoLaboralId: _selectedEstadoLaboralId,
-          empresaActual: _empresaActualController.text.trim().isEmpty 
-              ? null : _empresaActualController.text.trim(),
-          cargoActual: _cargoActualController.text.trim().isEmpty 
-              ? null : _cargoActualController.text.trim(),
-          fechaGraduacion: _fechaGraduacionController.text.trim().isEmpty 
-              ? null : _fechaGraduacionController.text.trim(),
-          semestreGraduacion: _semestreGraduacionController.text.trim().isEmpty 
-              ? null : _semestreGraduacionController.text.trim(),
-          anioGraduacion: _anioGraduacionController.text.trim().isEmpty 
-              ? null : int.tryParse(_anioGraduacionController.text.trim()),
-        ),
-      );
+    if (!_validateCurrentPage()) {
+      return;
     }
+    
+    context.read<AuthBloc>().add(
+      AuthProfileCompleted(
+        nombre: _nombreController.text.trim(),
+        apellido: _apellidoController.text.trim(),
+        celular: _celularController.text.trim(),
+        telefonoAlternativo: _telefonoAlternativoController.text.trim().isEmpty 
+            ? null : _telefonoAlternativoController.text.trim(),
+        correoPersonal: _correoPersonalController.text.trim(),
+        tipoDocumentoId: _selectedTipoDocumentoId!,
+        documento: _documentoController.text.trim(),
+        lugarExpedicion: _lugarExpedicionController.text.trim(),
+        gradoAcademicoId: _selectedGradoAcademicoId!,
+        carreraId: _selectedCarreraId!,
+        idUniversitario: _idUniversitarioController.text.trim(),
+      ),
+    );
   }
 
   @override
@@ -300,15 +332,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
       ),
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthError) {
+          if (state is AuthProfileCompletionFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.message),
+                content: Text(state.message.replaceAll('Exception: ', '')),
                 backgroundColor: AppColors.error,
+                duration: const Duration(seconds: 4),
               ),
             );
           } else if (state is AuthenticatedWithProfile) {
-            // Navegar a pantalla de éxito cuando el perfil se complete
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => ProfileSuccessScreen(
@@ -320,10 +352,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
         },
         child: Column(
           children: [
-            // Indicador de progreso
             _buildProgressIndicator(),
-            
-            // Contenido del formulario
             Expanded(
               child: FadeTransition(
                 opacity: _fadeAnimation,
@@ -331,6 +360,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                   key: _formKey,
                   child: PageView(
                     controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (page) {
                       setState(() {
                         _currentPage = page;
@@ -338,15 +368,13 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                     },
                     children: [
                       _buildPersonalInfoPage(),
+                      _buildIdentificationPage(),
                       _buildAcademicInfoPage(),
-                      _buildProfessionalInfoPage(),
                     ],
                   ),
                 ),
               ),
             ),
-            
-            // Botones de navegación
             _buildNavigationButtons(),
           ],
         ),
@@ -411,7 +439,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
           const SizedBox(height: AppConstants.paddingMedium),
           Text(
             _getPageTitle(),
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -425,11 +453,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
   String _getPageTitle() {
     switch (_currentPage) {
       case 0:
-        return 'Información Personal';
+        return 'Datos Personales';
       case 1:
-        return 'Información Académica';
+        return 'Identificación';
       case 2:
-        return 'Información Profesional';
+        return 'Información Académica';
       default:
         return '';
     }
@@ -441,7 +469,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Cuéntanos sobre ti',
             style: TextStyle(
               fontSize: 24,
@@ -450,40 +478,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
             ),
           ),
           const SizedBox(height: AppConstants.paddingSmall),
-          Text(
+          const Text(
             'Completa tu información personal básica',
             style: TextStyle(
               color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingSmall),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppConstants.paddingMedium,
-              vertical: AppConstants.paddingSmall,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 16,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: AppConstants.paddingSmall),
-                Text(
-                  'Los campos con * son obligatorios',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
             ),
           ),
           const SizedBox(height: AppConstants.paddingXLarge),
@@ -511,19 +509,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
-            controller: _idUniversitarioController,
-            label: 'ID Universitario *',
-            hint: 'Ej: 123456 (6 dígitos)',
-            validator: (value) => Validators.universityId(value),
-            prefixIcon: Icons.badge_outlined,
-            keyboardType: TextInputType.number,
-            inputFormatters: [DigitsOnlyFormatter(maxLength: 6)],
-          ),
-          const SizedBox(height: AppConstants.paddingLarge),
-          
-          CustomTextField(
-            controller: _telefonoController,
-            label: 'Teléfono *',
+            controller: _celularController,
+            label: 'Celular *',
             hint: 'Ej: 3001234567 (10 dígitos)',
             keyboardType: TextInputType.phone,
             validator: (value) => Validators.colombianPhone(value),
@@ -544,17 +531,42 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
-            controller: _ciudadController,
-            label: 'Ciudad *',
-            hint: 'Ciudad donde estudiaste',
-            validator: (value) => Validators.required(value, 'La ciudad'),
-            prefixIcon: Icons.location_city_outlined,
-            inputFormatters: [CapitalizeWordsFormatter()],
-            textCapitalization: TextCapitalization.words,
+            controller: _correoPersonalController,
+            label: 'Correo Personal *',
+            hint: 'tu.correo@gmail.com',
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) => Validators.email(value),
+            prefixIcon: Icons.email_outlined,
           ),
-          const SizedBox(height: AppConstants.paddingLarge),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIdentificationPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppConstants.paddingLarge),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Identificación',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          const Text(
+            'Información de tu documento de identidad',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingXLarge),
           
-          // Dropdown de carreras - OBLIGATORIO
+          // Dropdown de tipos de documento
           Container(
             padding: const EdgeInsets.all(AppConstants.paddingMedium),
             decoration: BoxDecoration(
@@ -565,7 +577,164 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
+                  'Tipo de Documento *',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppConstants.paddingSmall),
+                _isLoadingTiposDocumento
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppConstants.paddingMedium),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedTipoDocumentoId,
+                        decoration: const InputDecoration(
+                          hintText: 'Selecciona el tipo',
+                          border: InputBorder.none,
+                        ),
+                        items: _tiposDocumento.map((tipo) {
+                          return DropdownMenuItem<String>(
+                            value: tipo['id'] as String,
+                            child: SizedBox(
+                              width: 200,
+                              child: Text(
+                                tipo['nombre'] as String,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedTipoDocumentoId = value;
+                          });
+                        },
+                      ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingLarge),
+          
+          CustomTextField(
+            controller: _documentoController,
+            label: 'Número de Documento *',
+            hint: 'Ingresa tu número de documento',
+            keyboardType: TextInputType.text,
+            validator: (value) => Validators.required(value, 'El número de documento'),
+            prefixIcon: Icons.badge_outlined,
+          ),
+          const SizedBox(height: AppConstants.paddingLarge),
+          
+          CustomTextField(
+            controller: _lugarExpedicionController,
+            label: 'Lugar de Expedición *',
+            hint: 'Ciudad donde se expidió',
+            validator: (value) => Validators.required(value, 'El lugar de expedición'),
+            prefixIcon: Icons.location_city_outlined,
+            inputFormatters: [CapitalizeWordsFormatter()],
+            textCapitalization: TextCapitalization.words,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAcademicInfoPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppConstants.paddingLarge),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Información Académica',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          const Text(
+            'Detalles sobre tu formación universitaria',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingXLarge),
+          
+          // Dropdown de grados académicos
+          Container(
+            padding: const EdgeInsets.all(AppConstants.paddingMedium),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+              border: Border.all(color: AppColors.surfaceVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Grado Académico *',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppConstants.paddingSmall),
+                _isLoadingGradosAcademicos
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppConstants.paddingMedium),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedGradoAcademicoId,
+                        decoration: const InputDecoration(
+                          hintText: 'Selecciona el grado',
+                          border: InputBorder.none,
+                        ),
+                        items: _gradosAcademicos.map((grado) {
+                          return DropdownMenuItem<String>(
+                            value: grado['id'] as String,
+                            child: Text(
+                              grado['nombre'] as String,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedGradoAcademicoId = value;
+                            _filterCarrerasByGrado();
+                          });
+                        },
+                      ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingLarge),
+          
+          // Dropdown de carreras (filtrado)
+          Container(
+            padding: const EdgeInsets.all(AppConstants.paddingMedium),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+              border: Border.all(color: AppColors.surfaceVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
                   'Carrera *',
                   style: TextStyle(
                     fontSize: 14,
@@ -581,254 +750,113 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                           child: CircularProgressIndicator(),
                         ),
                       )
-                    : DropdownButtonFormField<String>(
-                        value: _selectedCarreraId,
-                        decoration: const InputDecoration(
-                          hintText: 'Selecciona tu carrera',
-                          border: InputBorder.none,
-                        ),
-                        items: _carreras.map((carrera) {
-                          return DropdownMenuItem<String>(
-                            value: carrera['id'] as String,
-                            child: Text(carrera['nombre'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedCarreraId = value;
-                          });
-                        },
-                        validator: (value) => value == null ? 'La carrera es obligatoria' : null,
-                      ),
+                    : _selectedGradoAcademicoId == null
+                        ? const Padding(
+                            padding: EdgeInsets.all(AppConstants.paddingMedium),
+                            child: Text(
+                              'Primero selecciona un grado académico',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          )
+                        : DropdownButtonFormField<String>(
+                            value: _selectedCarreraId,
+                            decoration: const InputDecoration(
+                              hintText: 'Selecciona tu carrera',
+                              border: InputBorder.none,
+                            ),
+                            items: _carrerasFiltradas.map((carrera) {
+                              return DropdownMenuItem<String>(
+                                value: carrera['id'] as String,
+                                child: Text(
+                                  carrera['nombre'] as String,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedCarreraId = value;
+                              });
+                            },
+                          ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAcademicInfoPage() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppConstants.paddingLarge),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Información Académica',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingSmall),
-          Text(
-            'Detalles sobre tu formación universitaria',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingSmall),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppConstants.paddingMedium,
-              vertical: AppConstants.paddingSmall,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 16,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: AppConstants.paddingSmall),
-                Text(
-                  'Los campos con * son obligatorios',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingXLarge),
-          
-          CustomTextField(
-            controller: _paisController,
-            label: 'País',
-            hint: 'País donde estudiaste (Opcional)',
-            prefixIcon: Icons.public_outlined,
-            inputFormatters: [CapitalizeWordsFormatter()],
-            textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           
           CustomTextField(
-            controller: _direccionController,
-            label: 'Dirección',
-            hint: 'Dirección actual (Opcional)',
-            prefixIcon: Icons.home_outlined,
-            inputFormatters: [CapitalizeWordsFormatter()],
-            textCapitalization: TextCapitalization.words,
+            controller: _idUniversitarioController,
+            label: 'ID Universitario *',
+            hint: 'Ej: 123456 (6 dígitos)',
+            validator: (value) => Validators.universityId(value),
+            prefixIcon: Icons.badge_outlined,
+            keyboardType: TextInputType.number,
+            inputFormatters: [DigitsOnlyFormatter(maxLength: 6)],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfessionalInfoPage() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppConstants.paddingLarge),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Información Profesional',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingSmall),
-          Text(
-            'Cuéntanos sobre tu situación laboral actual',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingSmall),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppConstants.paddingMedium,
-              vertical: AppConstants.paddingSmall,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.check_circle_outline,
-                  size: 16,
-                  color: AppColors.success,
-                ),
-                const SizedBox(width: AppConstants.paddingSmall),
-                Text(
-                  'Todos los campos de esta página son opcionales',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          
           const SizedBox(height: AppConstants.paddingXLarge),
           
-          // Estado laboral
+          // Checkbox de términos y condiciones
           Container(
             padding: const EdgeInsets.all(AppConstants.paddingMedium),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-              border: Border.all(color: AppColors.surfaceVariant),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Estado Laboral',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: AppConstants.paddingSmall),
-                _isLoadingEstadosLaborales
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(AppConstants.paddingMedium),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    : DropdownButtonFormField<String>(
-                        value: _selectedEstadoLaboralId,
-                        decoration: const InputDecoration(
-                          hintText: 'Selecciona tu estado laboral',
-                          border: InputBorder.none,
-                        ),
-                        items: _estadosLaborales.map((estado) {
-                          return DropdownMenuItem<String>(
-                            value: estado['id'] as String,
-                            child: Text(estado['nombre'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedEstadoLaboralId = value;
-                          });
-                        },
-                      ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppConstants.paddingLarge),
-          
-          CustomTextField(
-            controller: _empresaActualController,
-            label: 'Empresa Actual',
-            hint: 'Nombre de tu empresa (Opcional)',
-            prefixIcon: Icons.business_outlined,
-            inputFormatters: [CapitalizeWordsFormatter()],
-            textCapitalization: TextCapitalization.words,
-          ),
-          const SizedBox(height: AppConstants.paddingLarge),
-          
-          CustomTextField(
-            controller: _cargoActualController,
-            label: 'Cargo Actual',
-            hint: 'Tu cargo o posición (Opcional)',
-            prefixIcon: Icons.work_outline,
-            inputFormatters: [CapitalizeWordsFormatter()],
-            textCapitalization: TextCapitalization.words,
-          ),
-          const SizedBox(height: AppConstants.paddingXLarge),
-          
-          // Información adicional
-          Container(
-            padding: const EdgeInsets.all(AppConstants.paddingMedium),
-            decoration: BoxDecoration(
-              color: AppColors.info.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-              border: Border.all(color: AppColors.info.withOpacity(0.3)),
+              border: Border.all(
+                color: _termsAccepted ? AppColors.primary : AppColors.surfaceVariant,
+                width: _termsAccepted ? 2 : 1,
+              ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.info_outline,
-                  color: AppColors.info,
-                  size: 20,
+                Checkbox(
+                  value: _termsAccepted,
+                  onChanged: (value) {
+                    setState(() {
+                      _termsAccepted = value ?? false;
+                    });
+                  },
+                  activeColor: AppColors.primary,
                 ),
-                const SizedBox(width: AppConstants.paddingSmall),
                 Expanded(
-                  child: Text(
-                    'Esta información nos ayuda a mantener estadísticas actualizadas de nuestros egresados.',
-                    style: TextStyle(
-                      color: AppColors.info,
-                      fontSize: 14,
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _termsAccepted = !_termsAccepted;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: RichText(
+                        text: TextSpan(
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                            height: 1.4,
+                          ),
+                          children: [
+                            const TextSpan(text: 'Acepto los '),
+                            WidgetSpan(
+                              child: GestureDetector(
+                                onTap: () => _showTermsDialog(),
+                                child: Text(
+                                  'Términos y Condiciones',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const TextSpan(text: ' de uso de la aplicación Alumni UCC'),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -843,30 +871,35 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
   Widget _buildNavigationButtons() {
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingLarge),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
       child: BlocBuilder<AuthBloc, AuthState>(
         builder: (context, state) {
           final isLoading = state is AuthCompletingProfile;
           
           return Row(
             children: [
-              // Botón anterior
               if (_currentPage > 0)
                 Expanded(
                   child: CustomButton(
-                    text: 'Anterior',
+                    text: 'Atrás',
                     onPressed: isLoading ? null : _previousPage,
                     variant: ButtonVariant.outlined,
                   ),
                 ),
-              
-              if (_currentPage > 0)
-                const SizedBox(width: AppConstants.paddingMedium),
-              
-              // Botón siguiente/completar
+              if (_currentPage > 0) const SizedBox(width: AppConstants.paddingMedium),
               Expanded(
-                flex: _currentPage == 0 ? 1 : 1,
+                flex: 2,
                 child: CustomButton(
-                  text: _currentPage == 2 ? 'Completar Perfil' : 'Siguiente',
+                  text: _currentPage == 2 ? 'Completar Registro' : 'Siguiente',
                   onPressed: isLoading 
                       ? null 
                       : _currentPage == 2 
@@ -878,6 +911,92 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
             ],
           );
         },
+      ),
+    );
+  }
+  
+  void _showTermsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Términos y Condiciones'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Última actualización: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildTermSection(
+                '1. Aceptación de los Términos',
+                'Al acceder y utilizar la aplicación Alumni UCC, usted acepta estar sujeto a estos términos y condiciones de uso.',
+              ),
+              _buildTermSection(
+                '2. Uso de la Aplicación',
+                'Esta aplicación está destinada exclusivamente para egresados de la Universidad Cooperativa de Colombia. '
+                'Usted se compromete a proporcionar información veraz y actualizada.',
+              ),
+              _buildTermSection(
+                '3. Cuenta de Usuario',
+                'El acceso a la aplicación se realiza mediante su correo institucional. Usted es responsable de mantener '
+                'la confidencialidad de su cuenta y de todas las actividades que ocurran bajo su cuenta.',
+              ),
+              _buildTermSection(
+                '4. Propiedad Intelectual',
+                'Todo el contenido de esta aplicación, incluyendo textos, gráficos, logos e imágenes, es propiedad de la '
+                'Universidad Cooperativa de Colombia y está protegido por las leyes de propiedad intelectual.',
+              ),
+              _buildTermSection(
+                '5. Modificaciones',
+                'La Universidad se reserva el derecho de modificar estos términos en cualquier momento. '
+                'Las modificaciones entrarán en vigor inmediatamente después de su publicación en la aplicación.',
+              ),
+              _buildTermSection(
+                '6. Contacto',
+                'Para cualquier pregunta sobre estos términos, puede contactarnos a través de la opción "Ayuda" en el menú principal.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTermSection(String title, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            content,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }

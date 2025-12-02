@@ -1,40 +1,26 @@
-import { IsString, IsBoolean, IsOptional, MaxLength, IsNotEmpty } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsUUID } from 'class-validator';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
 
 export class CreateCarreraDto {
-    @ApiProperty({ description: 'Nombre de la carrera', example: 'Ingeniería de Sistemas' })
+    @ApiProperty({ description: 'Nombre de la carrera' })
     @IsString()
-    @MaxLength(255)
     @IsNotEmpty()
     nombre: string;
 
-    @ApiPropertyOptional({ description: 'Código de la carrera', example: 'ING-SIS' })
+    @ApiProperty({ description: 'Código de la carrera (ej: ING-SIS)' })
     @IsString()
-    @MaxLength(50)
     @IsNotEmpty()
     codigo: string;
 
-    @ApiPropertyOptional({ description: 'Si la carrera está activa', example: true, default: true })
-    @IsBoolean()
+    @ApiProperty({ description: 'ID del grado académico' })
+    @IsUUID()
     @IsNotEmpty()
-    activa: boolean;
+    grado_academico_id: string;
+
+    @ApiProperty({ description: 'Indica si la carrera está activa', default: true })
+    @IsBoolean()
+    @IsOptional()
+    activa?: boolean;
 }
 
-export class UpdateCarreraDto {
-    @ApiPropertyOptional({ description: 'Nombre de la carrera' })
-    @IsString()
-    @MaxLength(255)
-    @IsNotEmpty()
-    nombre: string;
-
-    @ApiPropertyOptional({ description: 'Código de la carrera' })
-    @IsString()
-    @MaxLength(50)
-    @IsNotEmpty()
-    codigo: string;
-
-    @ApiPropertyOptional({ description: 'Si la carrera está activa' })
-    @IsBoolean()
-    @IsNotEmpty()
-    activa: boolean;
-}
+export class UpdateCarreraDto extends PartialType(CreateCarreraDto) { }

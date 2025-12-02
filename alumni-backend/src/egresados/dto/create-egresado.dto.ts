@@ -14,44 +14,24 @@ export class CreateEgresadoDto {
   carrera_id: string;
 
   @IsString()
-  telefono: string;
+  celular: string;
 
   @IsString()
   @IsOptional()
   telefono_alternativo?: string;
 
   @IsString()
-  @IsOptional()
-  direccion?: string;
-
-  @IsString()
-  ciudad: string;
-
-  @IsString()
-  @IsOptional()
-  pais?: string;
+  correo_personal: string;
 
   @IsUUID()
-  @IsOptional()
-  estado_laboral_id?: string;
+  tipo_documento_id: string;
 
   @IsString()
-  @IsOptional()
-  empresa_actual?: string;
+  documento: string;
 
   @IsString()
-  @IsOptional()
-  cargo_actual?: string;
+  lugar_expedicion: string;
 
-  @IsDateString()
-  @IsOptional()
-  fecha_graduacion?: string;
-
-  @IsString()
-  @IsOptional()
-  semestre_graduacion?: string;
-
-  @IsString()
-  @IsOptional()
-  anio_graduacion?: number;
+  @IsUUID()
+  grado_academico_id: string;
 }

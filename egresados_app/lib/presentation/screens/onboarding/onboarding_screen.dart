@@ -224,37 +224,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     
                     const SizedBox(height: AppConstants.paddingMedium),
                     
-                    // Indicador de deslizar
-                    GestureDetector(
-                      onTap: _navigateToLogin,
-                      onHorizontalDragEnd: (details) {
-                        // Si desliza hacia la izquierda
-                        if (details.primaryVelocity! < 0) {
-                          _navigateToLogin();
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Desliza para continuar',
-                              style: TextStyle(
-                                color: AppColors.textOnPrimary.withOpacity(0.7),
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: AppConstants.paddingSmall),
-                            Icon(
-                              Icons.arrow_forward_ios,
-                              color: AppColors.textOnPrimary.withOpacity(0.7),
-                              size: 16,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+
                   ],
                 ),
               ),

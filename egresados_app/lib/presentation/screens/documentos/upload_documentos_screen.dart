@@ -134,11 +134,6 @@ class _UploadDocumentosScreenState extends State<UploadDocumentosScreen>
                       
                       // Lista de documentos
                       _buildDocumentosList(),
-                      
-                      if (_documentos.isNotEmpty) ...[
-                        const SizedBox(height: AppConstants.paddingLarge),
-                        _buildUnifiedPDFButton(),
-                      ],
                     ],
                   ),
                 ),

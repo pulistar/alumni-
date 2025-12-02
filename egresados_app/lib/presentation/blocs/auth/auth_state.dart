@@ -70,3 +70,17 @@ class AuthCompletingProfile extends AuthState {
   @override
   List<Object> get props => [user];
 }
+
+// Estado de error al completar perfil (mantiene al usuario en la pantalla de perfil)
+class AuthProfileCompletionFailure extends AuthState {
+  final UserModel user;
+  final String message;
+
+  const AuthProfileCompletionFailure({
+    required this.user,
+    required this.message,
+  });
+
+  @override
+  List<Object> get props => [user, message];
+}

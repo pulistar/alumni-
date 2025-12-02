@@ -37,3 +37,7 @@ build/
 
 # Supabase
 .supabase/
+
+# Firebase credentials (NEVER commit these!)
+config/firebase-admin-key.json
+firebase-admin-key.json
