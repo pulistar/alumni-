@@ -64,6 +64,10 @@ dependencies:
   
   # For date formatting
   intl: ^0.19.0
+  
+  # PDF generation
+  pdf: ^3.11.1
+  printing: ^5.13.3
 
 dev_dependencies:
   flutter_test:

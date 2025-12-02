@@ -170,6 +170,21 @@ export class AdminController {
     res.send(buffer);
   }
 
+  @Get('reportes/estadisticas/excel')
+  @ApiOperation({ summary: 'Exportar estadísticas completas a Excel' })
+  @ApiResponse({ status: 200, description: 'Archivo Excel generado' })
+  async exportEstadisticasExcel(@Res() res: any) {
+    const buffer = await this.adminService.exportEstadisticasExcel();
+
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=estadisticas-${Date.now()}.xlsx`,
+    });
+
+    res.send(buffer);
+  }
+
+
   @Get('reportes/pdfs-unificados')
   @ApiOperation({ summary: 'Obtener lista de PDFs unificados por carrera' })
   @ApiQuery({ name: 'carrera', required: false, description: 'Filtrar por carrera' })

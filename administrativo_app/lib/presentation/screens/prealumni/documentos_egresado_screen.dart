@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
 import '../../../data/models/documento.dart';
 import '../../../data/services/api_service.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../core/config/api_config.dart';
 
 class DocumentosEgresadoScreen extends StatefulWidget {
   final String egresadoId;
@@ -64,36 +67,104 @@ class _DocumentosEgresadoScreenState extends State<DocumentosEgresadoScreen> {
     }
   }
 
-  Future<void> _abrirDocumento(String? url) async {
-    if (url == null || url.isEmpty) {
+  Future<void> _abrirDocumento(String documentoId) async {
+    print('🔵 Intentando descargar documento con ID: $documentoId');
+    
+    if (documentoId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('URL de documento no disponible')),
+        const SnackBar(
+          content: Text('ID de documento no disponible'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
 
     try {
-      // For web, just open in new tab
-      if (kIsWeb) {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } else {
-          throw Exception('No se pudo abrir el documento');
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Descargando documento...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final token = authService.accessToken;
+      
+      if (token == null) throw Exception('No hay token de autenticación');
+
+      print('🔵 Descargando desde: ${ApiConfig.baseUrl}/admin/documentos/$documentoId/download');
+
+      // Download file from backend
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/documentos/$documentoId/download'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      print('🔵 Status de descarga: ${response.statusCode}');
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      if (response.statusCode == 200) {
+        // Get filename from headers or use default
+        String filename = 'documento.pdf';
+        final contentDisposition = response.headers['content-disposition'];
+        if (contentDisposition != null) {
+          final match = RegExp(r'filename="?([^"]+)"?').firstMatch(contentDisposition);
+          if (match != null) {
+            filename = match.group(1) ?? filename;
+          }
+        }
+
+        print('🔵 Nombre de archivo: $filename');
+
+        // Save file
+        String? outputPath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Guardar documento',
+          fileName: filename,
+        );
+
+        if (outputPath != null) {
+          final file = File(outputPath);
+          await file.writeAsBytes(response.bodyBytes);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Documento guardado en: $outputPath'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
         }
       } else {
-        // For desktop, download the file
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } else {
-          throw Exception('No se pudo abrir el documento');
-        }
+        print('❌ Error en descarga: ${response.body}');
+        throw Exception('Error al descargar documento (${response.statusCode})');
       }
     } catch (e) {
+      print('❌ Exception en descarga: $e');
       if (mounted) {
+        Navigator.pop(context); // Close loading if open
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -212,8 +283,8 @@ class _DocumentosEgresadoScreenState extends State<DocumentosEgresadoScreen> {
             ),
             trailing: IconButton(
               icon: const Icon(Icons.download),
-              onPressed: () => _abrirDocumento(doc.urlFirmada ?? doc.rutaArchivo),
-              tooltip: 'Ver documento',
+              onPressed: () => _abrirDocumento(doc.id),
+              tooltip: 'Descargar documento',
             ),
             isThreeLine: true,
           ),

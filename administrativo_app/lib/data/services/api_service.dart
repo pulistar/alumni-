@@ -643,6 +643,28 @@ class ApiService {
     }
   }
 
+  /// Export estadísticas to Excel
+  Future<List<int>> exportEstadisticasExcel(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/admin/reportes/estadisticas/excel'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
+      } else {
+        throw Exception('Error al exportar estadísticas');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Error al exportar estadísticas');
+    }
+  }
+
+
   // ==================== MÓDULOS ====================
 
   /// Get all modulos

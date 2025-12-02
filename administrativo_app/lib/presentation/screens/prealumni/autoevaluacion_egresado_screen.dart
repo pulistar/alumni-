@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:file_picker/file_picker.dart';
 import '../../../data/models/respuesta_autoevaluacion.dart';
 import '../../../data/services/api_service.dart';
 import '../../../data/services/auth_service.dart';
@@ -86,6 +90,14 @@ class _AutoevaluacionEgresadoScreenState extends State<AutoevaluacionEgresadoScr
         ),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
+        actions: [
+          if (_respuestas.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Descargar respuestas',
+              onPressed: _exportarRespuestas,
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -224,6 +236,117 @@ class _AutoevaluacionEgresadoScreenState extends State<AutoevaluacionEgresadoScr
         
       default:
         return Text(respuesta['respuesta_texto'] ?? '-');
+    }
+  }
+
+  Future<void> _exportarRespuestas() async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Generando PDF...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Generate PDF
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (context) => [
+            // Title
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                'Autoevaluación - ${widget.egresadoNombre}',
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
+            pw.SizedBox(height: 20),
+
+            // Responses table
+            pw.Table.fromTextArray(
+              headers: ['Pregunta', 'Tipo', 'Respuesta'],
+              data: _respuestas.map((respuesta) {
+                final pregunta = respuesta['pregunta'] as Map<String, dynamic>?;
+                final preguntaTexto = pregunta?['texto'] ?? 'Pregunta sin texto';
+                final tipoPregunta = pregunta?['tipo'] ?? 'unknown';
+                
+                String respuestaTexto = '';
+                if (tipoPregunta == 'likert') {
+                  final valor = respuesta['respuesta_numerica'] as int? ?? 0;
+                  respuestaTexto = '$valor / 5';
+                } else {
+                  respuestaTexto = respuesta['respuesta_texto'] ?? 'Sin respuesta';
+                }
+
+                return [
+                  preguntaTexto,
+                  tipoPregunta.toUpperCase(),
+                  respuestaTexto,
+                ];
+              }).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      // Save PDF
+      final bytes = await pdf.save();
+
+      String? outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Guardar respuestas',
+        fileName: 'autoevaluacion-${widget.egresadoNombre.replaceAll(' ', '_')}-${DateTime.now().millisecondsSinceEpoch}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (outputPath != null) {
+        final file = File(outputPath);
+        await file.writeAsBytes(bytes);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ PDF guardado en: $outputPath'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading if open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

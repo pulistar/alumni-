@@ -525,20 +525,25 @@ class _PreAlumniDashboardScreenState extends State<PreAlumniDashboardScreen> {
 
   void _showResultsDialog(Map<String, dynamic> resultado) {
     final procesados = resultado['procesados'] ?? 0;
-    final enviados = resultado['enviados'] ?? 0;
+    final exitosos = resultado['exitosos'] ?? resultado['enviados'] ?? 0;
     final errores = (resultado['errores'] as List?) ?? [];
+    
+    // Determinar si es habilitación o invitación
+    final esHabilitacion = resultado.containsKey('exitosos');
+    final titulo = esHabilitacion ? 'Resultados de Habilitación' : 'Resultados del Envío';
+    final mensajeExito = esHabilitacion ? 'Egresados habilitados' : 'Invitaciones enviadas';
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Resultados del Envío'),
+        title: Text(titulo),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('📊 Total procesados: $procesados'),
-              Text('✅ Invitaciones enviadas: $enviados', 
+              Text('✅ $mensajeExito: $exitosos', 
                 style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
               Text('❌ Errores: ${errores.length}', 
                 style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),

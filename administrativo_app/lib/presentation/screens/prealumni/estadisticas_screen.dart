@@ -1,6 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../../data/models/egresado.dart';
 import '../../../data/services/api_service.dart';
 import '../../../data/services/auth_service.dart';
@@ -83,6 +88,11 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: 'Descargar Estadísticas',
+            onPressed: _exportEstadisticas,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadAllData,
@@ -441,8 +451,9 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
 
   // Chart 5: Competencies Radar
   Widget _buildRadarCompetencias() {
-    if (_radarCompetencias == null || _radarCompetencias!.isEmpty) {
-      return _buildEmptyCard('Radar de Competencias', 'No hay datos de autoevaluación');
+    // Validate that we have at least 3 entries for radar chart
+    if (_radarCompetencias == null || _radarCompetencias!.length < 3) {
+      return _buildEmptyCard('Radar de Competencias', 'No hay suficientes datos de autoevaluación (mínimo 3 categorías)');
     }
 
     return Card(
@@ -526,5 +537,187 @@ class _EstadisticasScreenState extends State<EstadisticasScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _exportEstadisticas() async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Generando PDF...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      
+      // Generate PDF
+      final pdf = pw.Document();
+      
+      // Add pages with statistics
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (context) => [
+            // Title
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                'Estadísticas Detalladas',
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            
+            // Resumen General
+            pw.Header(level: 1, text: 'Resumen General'),
+            pw.Table.fromTextArray(
+              headers: ['Métrica', 'Valor'],
+              data: [
+                ['Total Egresados', _stats?.totalEgresados.toString() ?? '0'],
+                ['Egresados Habilitados', _stats?.egresadosHabilitados.toString() ?? '0'],
+                ['Documentos Completos', _stats?.documentosCompletos.toString() ?? '0'],
+                ['Autoevaluaciones Completas', _stats?.autoevaluacionesCompletas.toString() ?? '0'],
+              ],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+            pw.SizedBox(height: 20),
+            
+            // Distribución por Carrera
+            if (_distribucionCarrera != null && _distribucionCarrera!.isNotEmpty) ...[
+              pw.Header(level: 1, text: 'Distribución por Carrera'),
+              pw.Table.fromTextArray(
+                headers: ['Carrera', 'Total'],
+                data: _distribucionCarrera!.map((item) => [
+                  item['carrera'].toString(),
+                  item['total'].toString(),
+                ]).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+            
+            // Tasa de Empleabilidad
+            if (_tasaEmpleabilidad != null) ...[
+              pw.Header(level: 1, text: 'Tasa de Empleabilidad'),
+              pw.Table.fromTextArray(
+                headers: ['Estado', 'Cantidad', 'Porcentaje'],
+                data: [
+                  ['Empleados', _tasaEmpleabilidad!['empleados'].toString(), '${_tasaEmpleabilidad!['porcentaje_empleados']}%'],
+                  ['Desempleados', _tasaEmpleabilidad!['desempleados'].toString(), '${_tasaEmpleabilidad!['porcentaje_desempleados']}%'],
+                  ['Estudiando', _tasaEmpleabilidad!['estudiando'].toString(), '-'],
+                  ['Otros', _tasaEmpleabilidad!['otros'].toString(), '-'],
+                  ['Total', _tasaEmpleabilidad!['total'].toString(), '100%'],
+                ],
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+            
+            // Empleabilidad por Carrera
+            if (_empleabilidadCarrera != null && _empleabilidadCarrera!.isNotEmpty) ...[
+              pw.Header(level: 1, text: 'Empleabilidad por Carrera'),
+              pw.Table.fromTextArray(
+                headers: ['Carrera', 'Empleados', 'Desempleados', 'Total', '% Empleados'],
+                data: _empleabilidadCarrera!.map((item) => [
+                  item['carrera'].toString(),
+                  item['empleados'].toString(),
+                  item['desempleados'].toString(),
+                  item['total'].toString(),
+                  '${item['porcentaje_empleados']}%',
+                ]).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+            
+            // Embudo de Proceso
+            if (_embudoProceso != null && _embudoProceso!.isNotEmpty) ...[
+              pw.Header(level: 1, text: 'Embudo de Proceso'),
+              pw.Table.fromTextArray(
+                headers: ['Etapa', 'Total'],
+                data: _embudoProceso!.map((item) => [
+                  item['etapa'].toString(),
+                  item['total'].toString(),
+                ]).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+            
+            // Radar de Competencias
+            if (_radarCompetencias != null && _radarCompetencias!.isNotEmpty) ...[
+              pw.Header(level: 1, text: 'Radar de Competencias'),
+              pw.Table.fromTextArray(
+                headers: ['Categoría', 'Promedio', 'Total Respuestas'],
+                data: _radarCompetencias!.map((item) => [
+                  item['categoria'].toString(),
+                  item['promedio'].toString(),
+                  item['total_respuestas'].toString(),
+                ]).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+            ],
+          ],
+        ),
+      );
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+      
+      // Save PDF
+      final bytes = await pdf.save();
+      
+      String? outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Guardar estadísticas PDF',
+        fileName: 'estadisticas-${DateTime.now().millisecondsSinceEpoch}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (outputPath != null) {
+        final file = File(outputPath);
+        await file.writeAsBytes(bytes);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ PDF guardado en: $outputPath'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading if open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

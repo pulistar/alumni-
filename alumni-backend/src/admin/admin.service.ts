@@ -515,8 +515,20 @@ export class AdminService {
 
     const { data: egresados } = await client
       .from('egresados')
-      .select('carrera_id, estado_laboral_id, carreras(nombre), estado_laboral_id:estados_laborales(nombre)')
+      .select('carrera_id, estado_laboral_id, carreras(nombre)')
       .is('deleted_at', null);
+
+    // Manually fetch estados_laborales
+    const estadoIds = [...new Set((egresados || []).map(e => e.estado_laboral_id).filter(Boolean))];
+    let estadosMap = new Map();
+
+    if (estadoIds.length > 0) {
+      const { data: estados } = await client
+        .from('estados_laborales')
+        .select('id, nombre')
+        .in('id', estadoIds);
+      estadosMap = new Map((estados || []).map(e => [e.id, e]));
+    }
 
     // Group by career
     const grouped = (egresados || []).reduce((acc: any, e: any) => {
@@ -525,7 +537,8 @@ export class AdminService {
         acc[carrera] = { empleados: 0, desempleados: 0, estudiando: 0, otros: 0, total: 0 };
       }
 
-      const estado = (e.estado_laboral_id as any)?.nombre?.toLowerCase() || '';
+      const estadoData = estadosMap.get(e.estado_laboral_id);
+      const estado = estadoData?.nombre?.toLowerCase() || '';
       if (estado === 'empleado' || estado === 'independiente' || estado === 'trabajando') {
         acc[carrera].empleados++;
       } else if (estado === 'desempleado') {
@@ -583,7 +596,7 @@ export class AdminService {
       { etapa: 'Total Egresados', total: totalEgresados || 0 },
       { etapa: 'Habilitados', total: habilitados || 0 },
       { etapa: 'Documentos Completos', total: documentosCompletos || 0 },
-      { etapa: 'Autoevaluaci�n Completa', total: autoevaluacionesCompletas || 0 },
+      { etapa: 'Autoevaluación Completa', total: autoevaluacionesCompletas || 0 },
     ];
   }
 
@@ -599,13 +612,22 @@ export class AdminService {
       .eq('preguntas_autoevaluacion.tipo', 'likert')
       .not('respuesta_numerica', 'is', null);
 
+    // Default categories to ensure at least 3 entries for radar chart
+    const defaultCategories = [
+      { categoria: 'Competencias Técnicas', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Habilidades Blandas', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Liderazgo', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Comunicación', promedio: 0, total_respuestas: 0 },
+      { categoria: 'Trabajo en Equipo', promedio: 0, total_respuestas: 0 },
+    ];
+
     if (!respuestas || respuestas.length === 0) {
-      return [];
+      return defaultCategories;
     }
 
     // Group by category and calculate average
     const grouped = respuestas.reduce((acc: any, r: any) => {
-      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categor�a';
+      const categoria = r.preguntas_autoevaluacion?.categoria || 'Sin categoría';
       if (!acc[categoria]) {
         acc[categoria] = { sum: 0, count: 0 };
       }
@@ -614,11 +636,25 @@ export class AdminService {
       return acc;
     }, {});
 
-    return Object.entries(grouped).map(([categoria, stats]: [string, any]) => ({
+    const result = Object.entries(grouped).map(([categoria, stats]: [string, any]) => ({
       categoria,
       promedio: stats.count > 0 ? Number((stats.sum / stats.count).toFixed(2)) : 0,
       total_respuestas: stats.count,
     }));
+
+    // Ensure at least 3 categories for radar chart
+    if (result.length < 3) {
+      // Add default categories until we have at least 3
+      const existingCategories = new Set(result.map(r => r.categoria));
+      for (const defaultCat of defaultCategories) {
+        if (!existingCategories.has(defaultCat.categoria)) {
+          result.push(defaultCat);
+          if (result.length >= 5) break; // Limit to 5 categories
+        }
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -694,6 +730,11 @@ export class AdminService {
         return Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase().trim(), v]));
       });
 
+      // Log headers for debugging
+      if (data.length > 0) {
+        this.logger.log(`Excel headers found: ${Object.keys(data[0]).join(', ')}`);
+      }
+
       const resultados = {
         procesados: data.length,
         exitosos: 0,
@@ -727,6 +768,9 @@ export class AdminService {
           const celular = row['celular'];
           const telefono = row['tel domicilio'];
           const lugar_expedicion = row['lugar de exp'];
+
+          // Log values for debugging
+          this.logger.log(`Row ${rowNumber}: id=${id_universitario}, doc=${documento}, nombre=${nombreCompleto}, correo_inst=${correo_institucional}, correo_pers=${correo_personal}`);
 
           // Strict Validation: All key fields must be present
           if (!id_universitario || !documento || !nombreCompleto || !correo_institucional || !correo_personal) {
@@ -1084,13 +1128,153 @@ export class AdminService {
   }
 
   /**
+   * Export estadísticas to Excel
+   */
+  async exportEstadisticasExcel(): Promise<Buffer> {
+    // Get all statistics data
+    const [
+      stats,
+      distribucion,
+      tasaEmpleabilidad,
+      empleabilidadCarrera,
+      embudo,
+      radar,
+    ] = await Promise.all([
+      this.getDashboardStats(),
+      this.getDistribucionPorCarrera(),
+      this.getTasaEmpleabilidad(),
+      this.getEmpleabilidadPorCarrera(),
+      this.getEmbudoProceso(),
+      this.getRadarCompetencias(),
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+
+    // Sheet 1: Resumen General
+    const resumenSheet = workbook.addWorksheet('Resumen General');
+    resumenSheet.columns = [
+      { header: 'Métrica', key: 'metrica', width: 30 },
+      { header: 'Valor', key: 'valor', width: 15 },
+    ];
+    resumenSheet.addRow({ metrica: 'Total Egresados', valor: stats.total_egresados });
+    resumenSheet.addRow({ metrica: 'Egresados Habilitados', valor: stats.egresados_habilitados });
+    resumenSheet.addRow({ metrica: 'Documentos Completos', valor: stats.documentos_completos });
+    resumenSheet.addRow({ metrica: 'Autoevaluaciones Completas', valor: stats.autoevaluaciones_completas });
+    this._styleHeaderRow(resumenSheet);
+
+    // Sheet 2: Distribución por Carrera
+    const distribucionSheet = workbook.addWorksheet('Distribución por Carrera');
+    distribucionSheet.columns = [
+      { header: 'Carrera', key: 'carrera', width: 40 },
+      { header: 'Total', key: 'total', width: 15 },
+    ];
+    distribucion.forEach((item: any) => {
+      distribucionSheet.addRow({ carrera: item.carrera, total: item.total });
+    });
+    this._styleHeaderRow(distribucionSheet);
+
+    // Sheet 3: Tasa de Empleabilidad
+    const empleabilidadSheet = workbook.addWorksheet('Tasa de Empleabilidad');
+    empleabilidadSheet.columns = [
+      { header: 'Estado', key: 'estado', width: 20 },
+      { header: 'Cantidad', key: 'cantidad', width: 15 },
+      { header: 'Porcentaje', key: 'porcentaje', width: 15 },
+    ];
+    empleabilidadSheet.addRow({
+      estado: 'Empleados',
+      cantidad: tasaEmpleabilidad.empleados,
+      porcentaje: `${tasaEmpleabilidad.porcentaje_empleados}%`,
+    });
+    empleabilidadSheet.addRow({
+      estado: 'Desempleados',
+      cantidad: tasaEmpleabilidad.desempleados,
+      porcentaje: `${tasaEmpleabilidad.porcentaje_desempleados}%`,
+    });
+    empleabilidadSheet.addRow({
+      estado: 'Estudiando',
+      cantidad: tasaEmpleabilidad.estudiando,
+      porcentaje: '',
+    });
+    empleabilidadSheet.addRow({
+      estado: 'Otros',
+      cantidad: tasaEmpleabilidad.otros,
+      porcentaje: '',
+    });
+    this._styleHeaderRow(empleabilidadSheet);
+
+    // Sheet 4: Empleabilidad por Carrera
+    const empleabilidadCarreraSheet = workbook.addWorksheet('Empleabilidad por Carrera');
+    empleabilidadCarreraSheet.columns = [
+      { header: 'Carrera', key: 'carrera', width: 40 },
+      { header: 'Empleados', key: 'empleados', width: 15 },
+      { header: 'Desempleados', key: 'desempleados', width: 15 },
+      { header: 'Total', key: 'total', width: 15 },
+      { header: '% Empleados', key: 'porcentaje', width: 15 },
+    ];
+    empleabilidadCarrera.forEach((item: any) => {
+      empleabilidadCarreraSheet.addRow({
+        carrera: item.carrera,
+        empleados: item.empleados,
+        desempleados: item.desempleados,
+        total: item.total,
+        porcentaje: `${item.porcentaje_empleados}%`,
+      });
+    });
+    this._styleHeaderRow(empleabilidadCarreraSheet);
+
+    // Sheet 5: Embudo de Proceso
+    const embudoSheet = workbook.addWorksheet('Embudo de Proceso');
+    embudoSheet.columns = [
+      { header: 'Etapa', key: 'etapa', width: 30 },
+      { header: 'Total', key: 'total', width: 15 },
+    ];
+    embudo.forEach((item: any) => {
+      embudoSheet.addRow({ etapa: item.etapa, total: item.total });
+    });
+    this._styleHeaderRow(embudoSheet);
+
+    // Sheet 6: Radar de Competencias
+    const radarSheet = workbook.addWorksheet('Radar de Competencias');
+    radarSheet.columns = [
+      { header: 'Categoría', key: 'categoria', width: 30 },
+      { header: 'Promedio', key: 'promedio', width: 15 },
+      { header: 'Total Respuestas', key: 'total_respuestas', width: 20 },
+    ];
+    radar.forEach((item: any) => {
+      radarSheet.addRow({
+        categoria: item.categoria,
+        promedio: item.promedio,
+        total_respuestas: item.total_respuestas,
+      });
+    });
+    this._styleHeaderRow(radarSheet);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  /**
+   * Helper method to style header row
+   */
+  private _styleHeaderRow(worksheet: ExcelJS.Worksheet) {
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } } as any;
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF003366' },
+    } as any;
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' } as any;
+  }
+
+
+  /**
    * Get list of egresados with graduation documents (Documentos de Grado), optionally filtered by career
    */
   async getPDFsUnificados(carrera?: string) {
     try {
       const client = this.supabaseService.getClient();
 
-      // Query documentos_egresado table - showing ALL documents for now
+      // Query documentos_egresado table - only unified PDFs
       let query = client
         .from('documentos_egresado')
         .select(`
@@ -1109,7 +1293,7 @@ export class AdminService {
             carreras (nombre)
           )
         `)
-        // Temporarily removed filter to debug
+        .eq('es_unificado', true)  // Only unified PDFs
         .order('created_at', { ascending: false });
 
       const { data, error } = await query;
