@@ -53,7 +53,7 @@ dependencies:
   app_links:
     git:
       url: https://github.com/llfbandit/app_links.git
-      ref: v6.3.2
+      ref: main
   
   # Notifications (optional)
   # firebase_messaging: ^14.7.6
