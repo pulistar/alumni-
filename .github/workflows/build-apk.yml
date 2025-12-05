@@ -108,6 +108,10 @@ jobs:
           GRADLE_EOF
           fi
       
+      - name: Debug google-services.json
+        working-directory: ./egresados_app/android/app
+        run: cat google-services.json
+      
       - name: Build APK
         working-directory: ./egresados_app
         run: flutter build apk --release
