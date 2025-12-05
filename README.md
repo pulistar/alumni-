@@ -52,8 +52,8 @@ graph TB
         A[Egresados App<br/>Flutter]
     end
     
-    subgraph "Frontend - Web"
-        B[Administrativo App<br/>Flutter Web]
+    subgraph "Frontend - Escritorio"
+        B[Administrativo App<br/>Flutter escritorio]
     end
     
     subgraph "Backend"
